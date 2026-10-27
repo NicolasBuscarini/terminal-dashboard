@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  sysinfo — painel de status exibido ao abrir o terminal
+#
+#  Projeto: ~/Code/terminal-dashboard
+#  Uso:
+#    sysinfo                  mostra o painel
+#    sysinfo disks            detalhes dos discos e partições
+#    sysinfo ports [--all] [-v]  portas em escuta, processo e container
+#    sysinfo bench [dir]      benchmark de escrita/leitura sequencial
+#    sysinfo --help           mostra a ajuda
+#
+#  Configuração (variáveis de ambiente):
+#    SYSINFO_DISABLE=1          desativa o painel
+#    SYSINFO_DELAY=0.25         janela de amostragem de CPU/rede/disco (s)
+#    SYSINFO_BAR_WIDTH=14       largura das barras de CPU/MEM/SWAP (6 a 40)
+#    SYSINFO_NO_COLOR=1         desativa cores (NO_COLOR também funciona)
+#    SYSINFO_NET_CHECK=0        não testa conectividade com a internet
+#    SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet (s)
+#    SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
+#    SYSINFO_BENCH_SIZE=256     tamanho do benchmark, em MiB
+#    SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
+#    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
+#
+#  Dependências: bash, coreutils, util-linux e /proc + /sys. Opcionais: ss
+#  (portas), docker (containers nas portas), iw (Wi-Fi), ping (internet),
+#  systemctl (serviços) e smartctl (saúde/SMART em "sysinfo disks").
+#
+#  Código dividido em lib/ (uma responsabilidade por arquivo). Este entrypoint
+#  resolve o próprio symlink para encontrar lib/ mesmo via ~/.local/bin.
+# =============================================================================
+
+set -uo pipefail
+
+self=$(readlink -f -- "${BASH_SOURCE[0]}")
+lib_dir=$(cd -- "$(dirname -- "$self")/../lib" && pwd)
+
+# shellcheck source=lib/config.sh
+. "$lib_dir/config.sh"
+
+cleanup() {
+  [[ -n ${probe_file:-} ]] && rm -f "$probe_file"
+  [[ -n ${bench_file:-} ]] && rm -f "$bench_file"
+}
+trap cleanup EXIT
+
+mode=panel
+
+help() {
+  cat <<'HELP'
+sysinfo — resumo do sistema exibido ao abrir o terminal
+
+Uso:
+  sysinfo                  mostra o painel
+  sysinfo disks            discos, partições, uso, I/O e temperatura
+  sysinfo ports            lista as portas TCP em escuta e o processo/docker
+  sysinfo ports --all      lista TCP + UDP
+  sysinfo ports -v         mostra diretório e linha de comando do processo
+  sysinfo bench [dir]      benchmark de escrita/leitura sequencial
+  sysinfo --help           mostra esta ajuda
+  sysinfo --version        mostra a versão
+
+Variáveis de ambiente:
+  SYSINFO_DISABLE=1          desativa o painel
+  SYSINFO_DELAY=0.25         janela de amostragem de CPU/rede/disco, em s
+  SYSINFO_BAR_WIDTH=14       largura das barras de CPU/MEM/SWAP (6 a 40)
+  SYSINFO_NO_COLOR=1         desativa as cores (NO_COLOR também funciona)
+  SYSINFO_NET_CHECK=0        não testa conectividade com a internet
+  SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet, em s
+  SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
+  SYSINFO_BENCH_SIZE=256     tamanho do benchmark, em MiB
+  SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
+  SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
+HELP
+}
+
+case ${1:-} in
+  -h|--help) help; exit 0 ;;
+  -V|--version) printf 'sysinfo %s\n' "$version"; exit 0 ;;
+  ports|--ports) mode=ports ;;
+  disks|--disks) mode=disks ;;
+  bench|--bench) mode=bench; bench_target=${2:-$HOME} ;;
+  '') ;;
+  *) printf 'sysinfo: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
+esac
+
+if [[ $mode == panel ]]; then
+  [[ -t 1 ]] || exit 0
+  if [[ -n ${SYSINFO_DISABLE:-} && ${SYSINFO_DISABLE} != 0 ]]; then
+    exit 0
+  fi
+fi
+
+# shellcheck source=lib/ui.sh
+. "$lib_dir/ui.sh"
+# shellcheck source=lib/system.sh
+. "$lib_dir/system.sh"
+# shellcheck source=lib/disks.sh
+. "$lib_dir/disks.sh"
+# shellcheck source=lib/network.sh
+. "$lib_dir/network.sh"
+# shellcheck source=lib/ports.sh
+. "$lib_dir/ports.sh"
+# shellcheck source=lib/bench.sh
+. "$lib_dir/bench.sh"
+# shellcheck source=lib/panel.sh
+. "$lib_dir/panel.sh"
+
+case $mode in
+  ports) shift; show_ports "$@" ;;
+  disks) show_disks ;;
+  bench) show_bench "$bench_target" ;;
+  panel) render_panel ;;
+esac

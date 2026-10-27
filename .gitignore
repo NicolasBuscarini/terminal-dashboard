@@ -1,0 +1,6 @@
+# Arquivos temporários e de editor
+*.swp
+*.swo
+*~
+.DS_Store
+__pycache__/
