@@ -159,6 +159,142 @@ join_ports() {
   printf '%s' "$out"
 }
 
+# Cabeçalho da tabela de portas. Em terminais estreitos, omite endereço/proto.
+ports_table_header() {
+  if (( cols < 70 )); then
+    printf '  %s%-5s %-7s %s%s\n' "$C_DIM" 'PORTA' 'TIPO' 'PROCESSO' "$C_RESET"
+  else
+    printf '  %s%-5s %-5s %-18s %-7s %s%s\n' \
+      "$C_DIM" 'PORTA' 'PROTO' 'ENDEREÇO' 'TIPO' 'PROCESSO' "$C_RESET"
+  fi
+}
+
+# Linhas da tabela. Preenche P_TOTAL/P_DOCKER/... e imprime no máximo "max"
+# linhas (0 = todas). Os contadores sempre refletem todas as portas.
+ports_table_rows() {
+  local snap=${1:-tcp} verbose=${2:-0} max=${3:-0}
+  local detail_max
+  if (( cols < 70 )); then
+    detail_max=$(( cols - 16 ))
+  else
+    detail_max=$(( cols - 41 ))
+  fi
+  (( detail_max < 12 )) && detail_max=12
+
+  P_TOTAL=0 P_DOCKER=0 P_DEV=0 P_BANCO=0 P_SYS=0 P_USER=0 P_SHOWN=0
+  local port addr proto name pid kind detail col flavor label proj avail base
+  local -A seen=()
+  while IFS=$'\t' read -r port addr proto name pid; do
+    [[ -z $port ]] && continue
+    # O mesmo socket aparece em IPv4 e IPv6: conta uma vez só.
+    [[ -n ${seen[$port/$proto]:-} ]] && continue
+    seen[$port/$proto]=1
+    P_TOTAL=$(( P_TOTAL + 1 ))
+
+    if [[ -n ${docker_port[$port]:-} ]]; then
+      kind='docker'
+      detail=${docker_port[$port]}
+      P_DOCKER=$(( P_DOCKER + 1 ))
+    elif [[ -n $pid ]]; then
+      proc_info "$pid"
+      kind=$(port_kind "$PROC_NAME" "$PROC_CMD" "$PROC_CWD")
+      flavor=$(proc_flavor "$PROC_CMD")
+      label=$PROC_NAME
+      [[ -n $flavor && $flavor != "$PROC_NAME" ]] && label="$PROC_NAME ($flavor)"
+      if [[ -z $PROC_CWD ]]; then
+        proj=''
+      elif [[ $PROC_CWD == "$HOME" ]]; then
+        proj='~'
+      else
+        proj=${PROC_CWD##*/}
+      fi
+      base=" (pid $pid)"
+      avail=$(( detail_max - ${#label} - ${#base} - 3 ))
+      (( avail < 8 )) && avail=8
+      (( ${#proj} > avail )) && proj="…${proj:${#proj}-avail+1}"
+      detail="$label"
+      [[ -n $proj ]] && detail+=" · $proj"
+      detail+="$base"
+      case $kind in
+        dev) P_DEV=$(( P_DEV + 1 )) ;;
+        banco) P_BANCO=$(( P_BANCO + 1 )) ;;
+        *) P_USER=$(( P_USER + 1 )) ;;
+      esac
+    else
+      kind='sistema'
+      detail=${known_port_desc[$port]:-root}
+      P_SYS=$(( P_SYS + 1 ))
+    fi
+
+    # A partir daqui só imprimimos até o limite configurado.
+    (( max > 0 && P_SHOWN >= max )) && continue
+    P_SHOWN=$(( P_SHOWN + 1 ))
+
+    col=$(kind_color "$kind")
+    if (( cols < 70 )); then
+      (( ${#detail} > detail_max )) && detail="${detail:0:detail_max-1}${ch_ellipsis}"
+      printf '  %-5s %s%-7s%s %s\n' \
+        "$port" "$col" "$kind" "$C_RESET" "$detail"
+    else
+      (( ${#addr} > 18 )) && addr="${addr:0:17}${ch_ellipsis}"
+      (( ${#detail} > detail_max )) && detail="${detail:0:detail_max-1}${ch_ellipsis}"
+      printf '  %-5s %-5s %-18s %s%-7s%s %s\n' \
+        "$port" "$proto" "$addr" "$col" "$kind" "$C_RESET" "$detail"
+    fi
+
+    if (( verbose )) && [[ -n $pid ]]; then
+      printf '  %s         ↳ %s%s\n' "$C_DIM" "$(short_path "$PROC_CWD" 60)" "$C_RESET"
+      printf '  %s           %s%s\n' "$C_DIM" "${PROC_CMD:0:cols-14}" "$C_RESET"
+    fi
+  done < <(listen_snapshot "$snap")
+}
+
+ports_table_summary() {
+  local hint=${1:-1} verbose=${2:-0}
+  if (( P_TOTAL == 0 )); then
+    printf '  %snenhuma porta em escuta%s\n' "$C_DIM" "$C_RESET"
+    return
+  fi
+
+  if (( cols < 50 )); then
+    printf '\n  %s%d porta(s)%s\n' "$C_BOLD" "$P_TOTAL" "$C_RESET"
+    local parts=() part types=''
+    (( P_DOCKER > 0 )) && parts+=("$P_DOCKER docker")
+    (( P_DEV > 0 )) && parts+=("$P_DEV dev")
+    (( P_BANCO > 0 )) && parts+=("$P_BANCO banco")
+    (( P_USER > 0 )) && parts+=("$P_USER usuário")
+    (( P_SYS > 0 )) && parts+=("$P_SYS sistema")
+    for part in "${parts[@]}"; do
+      types+="${types:+ · }$part"
+    done
+    [[ -n $types ]] && printf '  %s%s%s\n' "$C_DIM" "$types" "$C_RESET"
+  else
+    printf '\n  %s%d porta(s)%s' "$C_BOLD" "$P_TOTAL" "$C_RESET"
+    (( P_DOCKER > 0 )) && printf ' %s· %d docker%s' "$C_DIM" "$P_DOCKER" "$C_RESET"
+    (( P_DEV > 0 )) && printf ' %s· %d dev%s' "$C_DIM" "$P_DEV" "$C_RESET"
+    (( P_BANCO > 0 )) && printf ' %s· %d banco%s' "$C_DIM" "$P_BANCO" "$C_RESET"
+    (( P_USER > 0 )) && printf ' %s· %d usuário%s' "$C_DIM" "$P_USER" "$C_RESET"
+    (( P_SYS > 0 )) && printf ' %s· %d sistema%s' "$C_DIM" "$P_SYS" "$C_RESET"
+    printf '\n'
+  fi
+
+  if (( P_SHOWN > 0 && P_SHOWN < P_TOTAL )); then
+    printf '  %s… +%d porta(s) não listadas%s\n' \
+      "$C_DIM" "$(( P_TOTAL - P_SHOWN ))" "$C_RESET"
+  fi
+  if (( P_SYS > 0 )); then
+    if (( cols < 64 )); then
+      printf '  %ssistema = root; sudo ss -tulpn%s\n' "$C_DIM" "$C_RESET"
+    else
+      printf '  %ssistema = socket de root; sem root o ss não revela o processo.%s\n' "$C_DIM" "$C_RESET"
+      printf '  %sPara ver todos os donos: sudo ss -tulpn%s\n' "$C_DIM" "$C_RESET"
+    fi
+  fi
+  if (( hint )) && (( verbose == 0 )); then
+    printf '  %sUse -v para ver diretório e linha de comando dos processos.%s\n' "$C_DIM" "$C_RESET"
+  fi
+}
+
 show_ports() {
   local all=0 verbose=0 arg
   for arg in "$@"; do
@@ -184,86 +320,12 @@ show_ports() {
   (( all )) && title='PORTAS EM ESCUTA (TCP + UDP)'
 
   printf '\n  %s%s%s\n\n' "$C_BOLD" "$title" "$C_RESET"
-  printf '  %s%-5s %-5s %-18s %-7s %s%s\n' "$C_DIM" 'PORTA' 'PROTO' 'ENDEREÇO' 'TIPO' 'PROCESSO' "$C_RESET"
+  ports_table_header
 
   local snap='tcp'
   (( all )) && snap='all'
-  local detail_max=$(( cols - 41 ))
-  (( detail_max < 24 )) && detail_max=24
-
-  local total=0 n_docker=0 n_dev=0 n_banco=0 n_sys=0 n_user=0
-  local port addr proto name pid kind detail col flavor label proj avail base
-  local -A seen=()
-  while IFS=$'\t' read -r port addr proto name pid; do
-    [[ -z $port ]] && continue
-    # O mesmo socket aparece em IPv4 e IPv6: conta uma vez só.
-    [[ -n ${seen[$port/$proto]:-} ]] && continue
-    seen[$port/$proto]=1
-    total=$(( total + 1 ))
-
-    if [[ -n ${docker_port[$port]:-} ]]; then
-      kind='docker'
-      detail=${docker_port[$port]}
-      n_docker=$(( n_docker + 1 ))
-    elif [[ -n $pid ]]; then
-      proc_info "$pid"
-      kind=$(port_kind "$PROC_NAME" "$PROC_CMD" "$PROC_CWD")
-      flavor=$(proc_flavor "$PROC_CMD")
-      label=$PROC_NAME
-      [[ -n $flavor && $flavor != "$PROC_NAME" ]] && label="$PROC_NAME ($flavor)"
-      if [[ -z $PROC_CWD ]]; then
-        proj=''
-      elif [[ $PROC_CWD == "$HOME" ]]; then
-        proj='~'
-      else
-        proj=${PROC_CWD##*/}
-      fi
-      base=" (pid $pid)"
-      avail=$(( detail_max - ${#label} - ${#base} - 3 ))
-      (( avail < 8 )) && avail=8
-      (( ${#proj} > avail )) && proj="…${proj:${#proj}-avail+1}"
-      detail="$label"
-      [[ -n $proj ]] && detail+=" · $proj"
-      detail+="$base"
-      case $kind in
-        dev) n_dev=$(( n_dev + 1 )) ;;
-        banco) n_banco=$(( n_banco + 1 )) ;;
-        *) n_user=$(( n_user + 1 )) ;;
-      esac
-    else
-      kind='sistema'
-      detail=${known_port_desc[$port]:-root}
-      n_sys=$(( n_sys + 1 ))
-    fi
-
-    col=$(kind_color "$kind")
-    (( ${#addr} > 18 )) && addr="${addr:0:17}${ch_ellipsis}"
-    (( ${#detail} > detail_max )) && detail="${detail:0:detail_max-1}${ch_ellipsis}"
-    printf '  %-5s %-5s %-18s %s%-7s%s %s\n' \
-      "$port" "$proto" "$addr" "$col" "$kind" "$C_RESET" "$detail"
-
-    if (( verbose )) && [[ -n $pid ]]; then
-      printf '  %s         ↳ %s%s\n' "$C_DIM" "$(short_path "$PROC_CWD" 60)" "$C_RESET"
-      printf '  %s           %s%s\n' "$C_DIM" "${PROC_CMD:0:cols-14}" "$C_RESET"
-    fi
-  done < <(listen_snapshot "$snap")
-
-  if (( total == 0 )); then
-    printf '  %snenhuma porta em escuta%s\n' "$C_DIM" "$C_RESET"
-  else
-    printf '\n  %s%d porta(s)%s' "$C_BOLD" "$total" "$C_RESET"
-    (( n_docker > 0 )) && printf ' %s· %d docker%s' "$C_DIM" "$n_docker" "$C_RESET"
-    (( n_dev > 0 )) && printf ' %s· %d dev%s' "$C_DIM" "$n_dev" "$C_RESET"
-    (( n_banco > 0 )) && printf ' %s· %d banco%s' "$C_DIM" "$n_banco" "$C_RESET"
-    (( n_user > 0 )) && printf ' %s· %d usuário%s' "$C_DIM" "$n_user" "$C_RESET"
-    (( n_sys > 0 )) && printf ' %s· %d sistema%s' "$C_DIM" "$n_sys" "$C_RESET"
-    printf '\n'
-  fi
-  if (( n_sys > 0 )); then
-    printf '  %ssistema = socket de root; sem root o ss não revela o processo.%s\n' "$C_DIM" "$C_RESET"
-    printf '  %sPara ver todos os donos: sudo ss -tulpn%s\n' "$C_DIM" "$C_RESET"
-  fi
-  (( verbose )) || printf '  %sUse -v para ver diretório e linha de comando dos processos.%s\n' "$C_DIM" "$C_RESET"
+  ports_table_rows "$snap" "$verbose" 0
+  ports_table_summary 1 "$verbose"
   printf '\n'
 }
 
@@ -364,4 +426,22 @@ render_ports_row() {
       fi
     fi
   fi
+}
+
+# Seção PORTAS do painel: tabela detalhada ou linha-resumo.
+render_ports_section() {
+  panel_on ports || return 0
+  command -v ss >/dev/null 2>&1 || return 0
+
+  if [[ $panel_ports == summary ]] || (( cols < 50 )); then
+    section 'PORTAS'
+    render_ports_row
+    return
+  fi
+
+  collect_docker_ports
+  section 'PORTAS EM ESCUTA'
+  ports_table_header
+  ports_table_rows tcp 0 "$panel_ports_max"
+  ports_table_summary 0 0
 }

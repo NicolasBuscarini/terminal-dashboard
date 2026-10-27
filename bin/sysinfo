@@ -18,9 +18,23 @@
 #    SYSINFO_NET_CHECK=0        não testa conectividade com a internet
 #    SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet (s)
 #    SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
-#    SYSINFO_BENCH_SIZE=256     tamanho do benchmark, em MiB
+#    SYSINFO_BENCH_SIZE=256     tamanho do benchmark do CLI, em MiB
 #    SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
 #    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
+#
+#    SYSINFO_PANEL=all          composição: all, compact, none ou lista de
+#                               header,cpu,mem,swap,disks,net,internet,ports,
+#                               bench,uptime,battery,temp,services
+#    SYSINFO_PANEL_HIDE=...     tokens removidos da composição
+#    SYSINFO_PANEL_DISKS=full   full (detalhes) ou summary (uma linha por disco)
+#    SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
+#    SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
+#    SYSINFO_PANEL_BENCH=auto   auto (cache expirado), live, cache ou off
+#    SYSINFO_BENCH_PANEL_SIZE=32  tamanho do bench rápido do painel, em MiB
+#    SYSINFO_BENCH_TTL_DAYS=7   validade do cache do bench, em dias
+#    SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
+#    SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
+#    SYSINFO_CACHE_DIR=...      diretório do cache (padrão XDG_CACHE_HOME/sysinfo)
 #
 #  Dependências: bash, coreutils, util-linux e /proc + /sys. Opcionais: ss
 #  (portas), docker (containers nas portas), iw (Wi-Fi), ping (internet),
@@ -68,9 +82,33 @@ Variáveis de ambiente:
   SYSINFO_NET_CHECK=0        não testa conectividade com a internet
   SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet, em s
   SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
-  SYSINFO_BENCH_SIZE=256     tamanho do benchmark, em MiB
+  SYSINFO_BENCH_SIZE=256     tamanho do benchmark do CLI, em MiB
   SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
   SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
+
+Composição do painel:
+  SYSINFO_PANEL=all          all, compact, none ou lista separada por vírgulas:
+                             header,cpu,mem,swap,disks,net,internet,ports,
+                             bench,uptime,battery,temp,services
+                             (aliases: memory, network/wifi, load)
+  SYSINFO_PANEL_HIDE=...     remove tokens da composição
+  SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
+  SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
+
+Detalhes e desempenho:
+  SYSINFO_PANEL_DISKS=full   full (detalhes/partições) ou summary
+  SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
+  SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
+  SYSINFO_PANEL_BENCH=auto   auto (refaz se o cache expirou), live, cache, off
+  SYSINFO_BENCH_PANEL_SIZE=32  tamanho do bench rápido do painel, em MiB
+  SYSINFO_BENCH_TTL_DAYS=7   validade do cache do bench, em dias
+  SYSINFO_CACHE_DIR=...      cache do bench (padrão: XDG_CACHE_HOME/sysinfo)
+
+Exemplos:
+  SYSINFO_PANEL=compact sysinfo
+  SYSINFO_PANEL_HIDE=bench,services sysinfo
+  SYSINFO_PANEL=header,cpu,mem,disks sysinfo
+  SYSINFO_PANEL_BENCH=off sysinfo
 HELP
 }
 

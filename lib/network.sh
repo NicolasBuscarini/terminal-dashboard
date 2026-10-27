@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
 # network.sh — interface ativa, Wi-Fi, taxas e teste de internet.
 
-# --------------------------------------------------------------------- rede
-# Seção REDE: link ativo, SSID/banda/sinal, taxas e status da internet.
-render_network_section() {
-  section 'REDE'
-  iface=$(awk '$2 == "00000000" { print $1; exit }' /proc/net/route 2>/dev/null)
-  ip_addr=''
-  if [[ -n $iface ]]; then
-    if command -v ip >/dev/null 2>&1; then
-      ip_addr=$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | cut -d/ -f1)
-    fi
-    [[ -z $ip_addr ]] && ip_addr=$(hostname -I 2>/dev/null | awk '{ print $1 }')
-  fi
-
-  drx=$(( net_rx2 - net_rx1 ))
-  dtx=$(( net_tx2 - net_tx1 ))
+# Linha do link ativo: interface, Wi-Fi/ethernet e taxas de rx/tx.
+render_network_link_row() {
+  local drx=$(( net_rx2 - net_rx1 ))
+  local dtx=$(( net_tx2 - net_tx1 ))
   rx_rate=$(( drx * 1000000000 / elapsed_ns ))
   tx_rate=$(( dtx * 1000000000 / elapsed_ns ))
   net_col=$C_GREEN
@@ -101,13 +90,16 @@ render_network_section() {
   else
     printf '  %s\n' "${C_DIM}sem conexão ativa${C_RESET}"
   fi
+}
 
-  status_line=''
+# Linha STATUS: IP local e resultado do ping de internet.
+render_status_row() {
+  local status_line=''
   [[ -n $ip_addr ]] && status_line="$ip_addr"
   if [[ $net_check != 0 && -n $probe_pid ]]; then
     [[ -n $status_line ]] && status_line="$status_line ${dot} "
     if [[ -n $net_online ]]; then
-      latency_ms=${net_latency%%.*}
+      local latency_ms=${net_latency%%.*}
       (( latency_ms == 0 )) && latency_ms='<1'
       status_line="$status_line${C_GREEN}Internet online${C_RESET} ${C_DIM}(${latency_ms} ms)${C_RESET}"
     else
@@ -115,4 +107,28 @@ render_network_section() {
     fi
   fi
   [[ -n $status_line ]] && emit_row 'STATUS' "$status_line"
+}
+
+# --------------------------------------------------------------------- rede
+# Seção REDE: link ativo e/ou status da internet, conforme a composição.
+render_network_section() {
+  panel_any net internet || return 0
+
+  iface=$(awk '$2 == "00000000" { print $1; exit }' /proc/net/route 2>/dev/null)
+  ip_addr=''
+  if [[ -n $iface ]]; then
+    if command -v ip >/dev/null 2>&1; then
+      ip_addr=$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | cut -d/ -f1)
+    fi
+    [[ -z $ip_addr ]] && ip_addr=$(hostname -I 2>/dev/null | awk '{ print $1 }')
+  fi
+
+  local body
+  body=$(
+    panel_on net && render_network_link_row
+    panel_on internet && render_status_row
+  )
+  [[ -n $body ]] || return 0
+  section 'REDE'
+  printf '%s\n' "$body"
 }

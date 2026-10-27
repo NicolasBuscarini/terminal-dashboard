@@ -140,107 +140,116 @@ show_disks() {
 
   printf '\n  %s%sDISCOS E PARTIÇÕES%s\n' "$C_DIM" "$C_BOLD" "$C_RESET"
 
-  local type size model temp temp_col type_col health health_col
-  local -a parts=()
-  local part pname psize fstype mnt ppct i branch bar_col
   for disk in "${DISK_NAMES[@]}"; do
-    type=$(disk_type_label "$disk")
-    size=$(fmt_bytes "${disk_size[$disk]}")
-    model=${disk_model[$disk]}
-    temp=$(disk_temp_c "$disk")
-
-    # Fallback opcional para temperatura via smartctl (ex.: HDD com drivetemp off).
-    if [[ -z $temp ]] && command -v smartctl >/dev/null 2>&1; then
-      temp=$(smartctl -A -n standby "/dev/$disk" 2>/dev/null | awk '/^Temperature:/ { print $2; exit }')
-    fi
-
-    case $type in
-      SSD*) type_col=$C_CYAN ;;
-      HDD*) type_col=$C_YELLOW ;;
-      *) type_col=$C_DIM ;;
-    esac
-
-    printf '\n  %s%-9s%s  %s%-9s%s  %s%9s%s' \
-      "$C_BOLD" "$disk" "$C_RESET" \
-      "$type_col" "$type" "$C_RESET" \
-      "$C_DIM" "$size" "$C_RESET"
-    [[ -n $model ]] && printf '  %s%s%s' "$C_DIM" "$model" "$C_RESET"
-    if [[ -n $temp ]]; then
-      if (( temp >= 70 )); then
-        temp_col=$C_RED
-      elif (( temp >= 55 )); then
-        temp_col=$C_YELLOW
-      else
-        temp_col=$C_GREEN
-      fi
-      printf '  %s·%s %s%s °C%s' "$C_DIM" "$C_RESET" "$temp_col" "$temp" "$C_RESET"
-    fi
     printf '\n'
-
-    if command -v smartctl >/dev/null 2>&1; then
-      health=$(smartctl -H -n standby "/dev/$disk" 2>/dev/null \
-        | sed -n 's/^SMART overall-health self-assessment test result: *//p' | head -n1)
-      if [[ -n $health ]]; then
-        if [[ $health == PASSED ]]; then health_col=$C_GREEN; else health_col=$C_RED; fi
-        printf '    %sSaúde%s  %s%s%s\n' "$C_DIM" "$C_RESET" "$health_col" "$health" "$C_RESET"
-      fi
-    fi
-
-    parts=()
-    for part in /sys/block/"$disk"/"$disk"*; do
-      [[ -e $part ]] && parts+=("${part##*/}")
-    done
-    if (( ${#parts[@]} > 0 )); then
-      mapfile -t parts < <(printf '%s\n' "${parts[@]}" | sort -V)
-    fi
-
-    for i in "${!parts[@]}"; do
-      pname=${parts[$i]}
-      if (( i == ${#parts[@]} - 1 )); then
-        branch=${ch_branch[1]}
-      else
-        branch=${ch_branch[0]}
-      fi
-
-      psize=$(cat "/sys/block/$disk/$pname/size" 2>/dev/null || true)
-      [[ $psize =~ ^[0-9]+$ ]] || psize=0
-      psize=$(( psize * 512 ))
-
-      mnt=${fs_mount[$pname]:-}
-      fstype=${fs_type[$pname]:-}
-      if [[ -z $fstype ]]; then
-        fstype=$(lsblk -rno FSTYPE "/dev/$pname" 2>/dev/null || true)
-      fi
-      [[ -z $fstype ]] && fstype='-'
-
-      printf '    %s%s%s %-12s %-7.7s %10s  ' \
-        "$C_DIM" "$branch" "$C_RESET" \
-        "$pname" "$fstype" "$(fmt_bytes "$psize")"
-
-      if [[ -n $mnt ]]; then
-        ppct=${fs_pct[$pname]:-0}
-        bar_col=$(level_color "$ppct")
-        make_bar "$ppct" 8
-        printf '%s%s%s %s%3d%%%s  %s%s%s\n' \
-          "$bar_col" "$BAR" "$C_RESET" \
-          "$bar_col" "$ppct" "$C_RESET" \
-          "$C_DIM" "$mnt" "$C_RESET"
-      else
-        printf '%s%s%s\n' "$C_DIM" 'sem montagem' "$C_RESET"
-      fi
-    done
-
-    if (( ${rr[$disk]:-0} == 0 && ${rw[$disk]:-0} == 0 )); then
-      printf '    %sI/O agora%s  %socioso%s\n' "$C_DIM" "$C_RESET" "$C_DIM" "$C_RESET"
-    else
-      printf '    %sI/O agora%s  %s%s%s %s/s  %s%s%s %s/s\n' \
-        "$C_DIM" "$C_RESET" \
-        "$C_GREEN" "$arrow_down" "$C_RESET" "$(fmt_bytes "${rr[$disk]:-0}")" \
-        "$C_YELLOW" "$arrow_up" "$C_RESET" "$(fmt_bytes "${rw[$disk]:-0}")"
-    fi
+    render_disk_detail "$disk" "${rr[$disk]:-0}" "${rw[$disk]:-0}"
   done
 
   printf '\n'
+}
+
+# Detalhe de um disco: cabeçalho, saúde, partições e I/O. Usado por
+# "sysinfo disks" e pelo painel no modo SYSINFO_PANEL_DISKS=full.
+render_disk_detail() {
+  local disk=$1 rr=${2:-0} rw=${3:-0}
+  local type size model temp temp_col type_col health health_col
+  local -a parts=()
+  local part pname psize fstype mnt ppct i branch bar_col
+
+  type=$(disk_type_label "$disk")
+  size=$(fmt_bytes "${disk_size[$disk]}")
+  model=${disk_model[$disk]}
+  temp=$(disk_temp_c "$disk")
+
+  # Fallback opcional para temperatura via smartctl (ex.: HDD com drivetemp off).
+  if [[ -z $temp ]] && command -v smartctl >/dev/null 2>&1; then
+    temp=$(smartctl -A -n standby "/dev/$disk" 2>/dev/null | awk '/^Temperature:/ { print $2; exit }')
+  fi
+
+  case $type in
+    SSD*) type_col=$C_CYAN ;;
+    HDD*) type_col=$C_YELLOW ;;
+    *) type_col=$C_DIM ;;
+  esac
+
+  printf '  %s%-9s%s  %s%-9s%s  %s%9s%s' \
+    "$C_BOLD" "$disk" "$C_RESET" \
+    "$type_col" "$type" "$C_RESET" \
+    "$C_DIM" "$size" "$C_RESET"
+  [[ -n $model ]] && printf '  %s%s%s' "$C_DIM" "$model" "$C_RESET"
+  if [[ -n $temp ]]; then
+    if (( temp >= 70 )); then
+      temp_col=$C_RED
+    elif (( temp >= 55 )); then
+      temp_col=$C_YELLOW
+    else
+      temp_col=$C_GREEN
+    fi
+    printf '  %s·%s %s%s °C%s' "$C_DIM" "$C_RESET" "$temp_col" "$temp" "$C_RESET"
+  fi
+  printf '\n'
+
+  if command -v smartctl >/dev/null 2>&1; then
+    health=$(smartctl -H -n standby "/dev/$disk" 2>/dev/null \
+      | sed -n 's/^SMART overall-health self-assessment test result: *//p' | head -n1)
+    if [[ -n $health ]]; then
+      if [[ $health == PASSED ]]; then health_col=$C_GREEN; else health_col=$C_RED; fi
+      printf '    %sSaúde%s  %s%s%s\n' "$C_DIM" "$C_RESET" "$health_col" "$health" "$C_RESET"
+    fi
+  fi
+
+  parts=()
+  for part in /sys/block/"$disk"/"$disk"*; do
+    [[ -e $part ]] && parts+=("${part##*/}")
+  done
+  if (( ${#parts[@]} > 0 )); then
+    mapfile -t parts < <(printf '%s\n' "${parts[@]}" | sort -V)
+  fi
+
+  for i in "${!parts[@]}"; do
+    pname=${parts[$i]}
+    if (( i == ${#parts[@]} - 1 )); then
+      branch=${ch_branch[1]}
+    else
+      branch=${ch_branch[0]}
+    fi
+
+    psize=$(cat "/sys/block/$disk/$pname/size" 2>/dev/null || true)
+    [[ $psize =~ ^[0-9]+$ ]] || psize=0
+    psize=$(( psize * 512 ))
+
+    mnt=${fs_mount[$pname]:-}
+    fstype=${fs_type[$pname]:-}
+    if [[ -z $fstype ]]; then
+      fstype=$(lsblk -rno FSTYPE "/dev/$pname" 2>/dev/null || true)
+    fi
+    [[ -z $fstype ]] && fstype='-'
+
+    printf '    %s%s%s %-12s %-7.7s %10s  ' \
+      "$C_DIM" "$branch" "$C_RESET" \
+      "$pname" "$fstype" "$(fmt_bytes "$psize")"
+
+    if [[ -n $mnt ]]; then
+      ppct=${fs_pct[$pname]:-0}
+      bar_col=$(level_color "$ppct")
+      make_bar "$ppct" 8
+      printf '%s%s%s %s%3d%%%s  %s%s%s\n' \
+        "$bar_col" "$BAR" "$C_RESET" \
+        "$bar_col" "$ppct" "$C_RESET" \
+        "$C_DIM" "$mnt" "$C_RESET"
+    else
+      printf '%s%s%s\n' "$C_DIM" 'sem montagem' "$C_RESET"
+    fi
+  done
+
+  if (( rr == 0 && rw == 0 )); then
+    printf '    %sI/O agora%s  %socioso%s\n' "$C_DIM" "$C_RESET" "$C_DIM" "$C_RESET"
+  else
+    printf '    %sI/O agora%s  %s%s%s %s/s  %s%s%s %s/s\n' \
+      "$C_DIM" "$C_RESET" \
+      "$C_GREEN" "$arrow_down" "$C_RESET" "$(fmt_bytes "$rr")" \
+      "$C_YELLOW" "$arrow_up" "$C_RESET" "$(fmt_bytes "$rw")"
+  fi
 }
 
 # ===================================================================== painel

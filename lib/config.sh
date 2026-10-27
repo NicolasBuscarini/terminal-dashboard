@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.2.0
+version=2.3.0
 probe_file=''
 bench_file=''
 
@@ -35,6 +35,49 @@ disks_delay=${SYSINFO_DISKS_DELAY:-0.3}
 disks_delay=${disks_delay/,/.}
 
 docker_check=${SYSINFO_DOCKER_CHECK:-1}
+
+# ------------------------------------------------------------- painel/composição
+# all | compact | lista de: header cpu mem swap disks net internet ports bench
+#                        uptime battery temp services
+panel_mode=${SYSINFO_PANEL:-all}
+panel_hide=${SYSINFO_PANEL_HIDE:-}
+
+panel_disks=${SYSINFO_PANEL_DISKS:-full}
+[[ $panel_disks == full || $panel_disks == summary ]] || panel_disks=full
+
+panel_ports=${SYSINFO_PANEL_PORTS:-table}
+[[ $panel_ports == table || $panel_ports == summary ]] || panel_ports=table
+
+panel_bench=${SYSINFO_PANEL_BENCH:-auto}
+case $panel_bench in
+  auto|live|cache|off) ;;
+  *) panel_bench=auto ;;
+esac
+
+panel_columns=${SYSINFO_PANEL_COLUMNS:-auto}
+case $panel_columns in
+  auto|1|2) ;;
+  *) panel_columns=auto ;;
+esac
+
+panel_hint=${SYSINFO_PANEL_HINT:-1}
+[[ $panel_hint == 0 ]] || panel_hint=1
+
+panel_ports_max=${SYSINFO_PANEL_PORTS_MAX:-0}
+[[ $panel_ports_max =~ ^[0-9]+$ ]] || panel_ports_max=0
+(( panel_ports_max > 999 )) && panel_ports_max=999
+
+bench_panel_size=${SYSINFO_BENCH_PANEL_SIZE:-32}
+[[ $bench_panel_size =~ ^[0-9]+$ ]] || bench_panel_size=32
+(( bench_panel_size < 8 )) && bench_panel_size=8
+(( bench_panel_size > 4096 )) && bench_panel_size=4096
+
+bench_ttl_days=${SYSINFO_BENCH_TTL_DAYS:-7}
+[[ $bench_ttl_days =~ ^[0-9]+$ ]] || bench_ttl_days=7
+(( bench_ttl_days > 3650 )) && bench_ttl_days=3650
+
+bench_cache_dir=${SYSINFO_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo}
+bench_cache_file=$bench_cache_dir/bench
 
 # --------------------------------------------------------------------- cores
 C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN='' C_ACCENT=''
