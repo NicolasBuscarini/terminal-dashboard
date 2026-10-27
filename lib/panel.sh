@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # panel.sh — composição dinâmica do painel e layout responsivo.
 
-PANEL_ALL=(header cpu mem swap disks net internet ports bench uptime battery temp services)
+PANEL_ALL=(header cpu mem swap ram disks net internet ports bench uptime battery temp services)
 declare -A PANEL_ON=()
 
 # Adiciona um token (ou preset) à composição do painel.
@@ -12,15 +12,15 @@ panel_add_token() {
       for t in "${PANEL_ALL[@]}"; do PANEL_ON[$t]=1; done
       ;;
     compact|minimal)
-      for t in header cpu mem swap disks net internet ports uptime battery temp; do
+      for t in header cpu mem swap ram disks net internet ports uptime battery temp; do
         PANEL_ON[$t]=1
       done
       ;;
     none) PANEL_ON=() ;;
-    memory) PANEL_ON[mem]=1 ;;
+    memory) PANEL_ON[mem]=1; PANEL_ON[ram]=1 ;;
     network|wifi) PANEL_ON[net]=1; PANEL_ON[internet]=1 ;;
     load) PANEL_ON[cpu]=1 ;;
-    header|cpu|mem|swap|disks|net|internet|ports|bench|uptime|battery|temp|services)
+    header|cpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services)
       PANEL_ON[$tok]=1
       ;;
   esac
@@ -32,11 +32,11 @@ panel_del_token() {
   case $tok in
     all) PANEL_ON=() ;;
     compact|minimal)
-      for t in header cpu mem swap disks net internet ports uptime battery temp; do
+      for t in header cpu mem swap ram disks net internet ports uptime battery temp; do
         unset 'PANEL_ON[$t]'
       done
       ;;
-    memory) unset 'PANEL_ON[mem]' ;;
+    memory) unset 'PANEL_ON[mem]'; unset 'PANEL_ON[ram]' ;;
     network|wifi) unset 'PANEL_ON[net]'; unset 'PANEL_ON[internet]' ;;
     load) unset 'PANEL_ON[cpu]' ;;
     *) unset "PANEL_ON[$tok]" ;;
@@ -48,6 +48,7 @@ panel_config_init() {
   local tok
   for tok in ${panel_mode//,/ }; do panel_add_token "$tok"; done
   for tok in ${panel_hide//,/ }; do panel_del_token "$tok"; done
+  [[ $panel_ram == off ]] && unset 'PANEL_ON[ram]'
 }
 
 panel_on() { [[ -n ${PANEL_ON[$1]:-} ]]; }
@@ -222,11 +223,12 @@ render_swap_row() {
 }
 
 render_processing_section() {
-  panel_any cpu mem swap || return 0
+  panel_any cpu mem swap ram || return 0
   section 'PROCESSAMENTO'
   panel_on cpu && render_cpu_row
   panel_on mem && render_mem_row
   panel_on swap && render_swap_row
+  panel_on ram && render_ram_rows
 }
 
 # ---------------------------------------------------------------- armazenamento
@@ -388,7 +390,7 @@ render_panel() {
 
   # Em terminais largos, PROCESSAMENTO e SISTEMA dividem a primeira faixa.
   local two_cols=0
-  if [[ $panel_columns != 1 ]] && panel_any cpu mem swap && panel_any uptime battery temp services; then
+  if [[ $panel_columns != 1 ]] && panel_any cpu mem swap ram && panel_any uptime battery temp services; then
     if [[ $panel_columns == 2 ]]; then
       (( cols >= 90 )) && two_cols=1
     else
@@ -416,7 +418,9 @@ render_panel() {
   fi
 
   if (( panel_hint )) && (( ${#PANEL_ON[@]} > 0 )); then
-    printf '\n  %s%s%s\n' "$C_DIM" 'sysinfo disks · ports · bench · --help' "$C_RESET"
+    local hint='sysinfo disks · ram · ports · bench · --help'
+    (( cols < 60 )) && hint='sysinfo --help'
+    printf '\n  %s%s%s\n' "$C_DIM" "$hint" "$C_RESET"
   fi
   printf '\n'
 }

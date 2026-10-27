@@ -6,6 +6,7 @@
 #  Uso:
 #    sysinfo                  mostra o painel
 #    sysinfo disks            detalhes dos discos e partições
+#    sysinfo ram [--update]   slots, tipo, frequência e temperatura da RAM
 #    sysinfo ports [--all] [-v]  portas em escuta, processo e container
 #    sysinfo bench [dir]      benchmark de escrita/leitura sequencial
 #    sysinfo --help           mostra a ajuda
@@ -23,10 +24,11 @@
 #    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
 #
 #    SYSINFO_PANEL=all          composição: all, compact, none ou lista de
-#                               header,cpu,mem,swap,disks,net,internet,ports,
+#                               header,cpu,mem,swap,ram,disks,net,internet,ports,
 #                               bench,uptime,battery,temp,services
 #    SYSINFO_PANEL_HIDE=...     tokens removidos da composição
 #    SYSINFO_PANEL_DISKS=full   full (detalhes) ou summary (uma linha por disco)
+#    SYSINFO_PANEL_RAM=full     full (slots), summary ou off
 #    SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
 #    SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
 #    SYSINFO_PANEL_BENCH=auto   auto (cache expirado), live, cache ou off
@@ -35,6 +37,7 @@
 #    SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
 #    SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
 #    SYSINFO_CACHE_DIR=...      diretório do cache (padrão XDG_CACHE_HOME/sysinfo)
+#    SYSINFO_RAM_DMI_FILE=...   usa um dump de "dmidecode -t memory" em vez do cache
 #
 #  Dependências: bash, coreutils, util-linux e /proc + /sys. Opcionais: ss
 #  (portas), docker (containers nas portas), iw (Wi-Fi), ping (internet),
@@ -45,6 +48,14 @@
 # =============================================================================
 
 set -uo pipefail
+
+# "sudo sysinfo ram --update" deve usar o cache do usuário que chamou o sudo,
+# não o /root. O comando também funciona sem sudo (ele chama o sudo sozinho).
+if (( EUID == 0 )) && [[ -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+  _sudo_home=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
+  [[ -n $_sudo_home ]] && export HOME=$_sudo_home
+  unset _sudo_home
+fi
 
 self=$(readlink -f -- "${BASH_SOURCE[0]}")
 lib_dir=$(cd -- "$(dirname -- "$self")/../lib" && pwd)
@@ -67,6 +78,8 @@ sysinfo — resumo do sistema exibido ao abrir o terminal
 Uso:
   sysinfo                  mostra o painel
   sysinfo disks            discos, partições, uso, I/O e temperatura
+  sysinfo ram              slots, tipo, frequência, fabricante e temperatura da RAM
+  sysinfo ram --update     relê o DMI com sudo e atualiza o cache
   sysinfo ports            lista as portas TCP em escuta e o processo/docker
   sysinfo ports --all      lista TCP + UDP
   sysinfo ports -v         mostra diretório e linha de comando do processo
@@ -88,7 +101,7 @@ Variáveis de ambiente:
 
 Composição do painel:
   SYSINFO_PANEL=all          all, compact, none ou lista separada por vírgulas:
-                             header,cpu,mem,swap,disks,net,internet,ports,
+                             header,cpu,mem,swap,ram,disks,net,internet,ports,
                              bench,uptime,battery,temp,services
                              (aliases: memory, network/wifi, load)
   SYSINFO_PANEL_HIDE=...     remove tokens da composição
@@ -97,12 +110,14 @@ Composição do painel:
 
 Detalhes e desempenho:
   SYSINFO_PANEL_DISKS=full   full (detalhes/partições) ou summary
+  SYSINFO_PANEL_RAM=full     full (lista os slots), summary (uma linha) ou off
   SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
   SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
   SYSINFO_PANEL_BENCH=auto   auto (refaz se o cache expirou), live, cache, off
   SYSINFO_BENCH_PANEL_SIZE=32  tamanho do bench rápido do painel, em MiB
   SYSINFO_BENCH_TTL_DAYS=7   validade do cache do bench, em dias
-  SYSINFO_CACHE_DIR=...      cache do bench (padrão: XDG_CACHE_HOME/sysinfo)
+  SYSINFO_CACHE_DIR=...      cache do bench e da RAM (padrão: XDG_CACHE_HOME/sysinfo)
+  SYSINFO_RAM_DMI_FILE=...   dump de "dmidecode -t memory" para os detalhes de RAM
 
 Exemplos:
   SYSINFO_PANEL=compact sysinfo
@@ -117,6 +132,7 @@ case ${1:-} in
   -V|--version) printf 'sysinfo %s\n' "$version"; exit 0 ;;
   ports|--ports) mode=ports ;;
   disks|--disks) mode=disks ;;
+  ram|mem|memory|--ram) mode=ram ;;
   bench|--bench) mode=bench; bench_target=${2:-$HOME} ;;
   '') ;;
   *) printf 'sysinfo: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
@@ -141,12 +157,15 @@ fi
 . "$lib_dir/ports.sh"
 # shellcheck source=lib/bench.sh
 . "$lib_dir/bench.sh"
+# shellcheck source=lib/memory.sh
+. "$lib_dir/memory.sh"
 # shellcheck source=lib/panel.sh
 . "$lib_dir/panel.sh"
 
 case $mode in
   ports) shift; show_ports "$@" ;;
   disks) show_disks ;;
+  ram) shift; show_ram "$@" ;;
   bench) show_bench "$bench_target" ;;
   panel) render_panel ;;
 esac

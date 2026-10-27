@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.3.0
+version=2.4.0
 probe_file=''
 bench_file=''
 
@@ -54,6 +54,12 @@ case $panel_bench in
   *) panel_bench=auto ;;
 esac
 
+panel_ram=${SYSINFO_PANEL_RAM:-full}
+case $panel_ram in
+  full|summary|off) ;;
+  *) panel_ram=full ;;
+esac
+
 panel_columns=${SYSINFO_PANEL_COLUMNS:-auto}
 case $panel_columns in
   auto|1|2) ;;
@@ -78,6 +84,13 @@ bench_ttl_days=${SYSINFO_BENCH_TTL_DAYS:-7}
 
 bench_cache_dir=${SYSINFO_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo}
 bench_cache_file=$bench_cache_dir/bench
+
+# Cache do dmidecode com os detalhes dos módulos de RAM. O painel nunca pede
+# senha: usa o cache criado por "sysinfo ram --update".
+memory_cache_dir=$bench_cache_dir
+memory_cache_file=$memory_cache_dir/dmidecode-memory
+memory_hwmon_dir=${SYSINFO_RAM_HWMON_DIR:-/sys/class/hwmon}
+memory_edac_dir=${SYSINFO_RAM_EDAC_DIR:-/sys/devices/system/edac/mc}
 
 # --------------------------------------------------------------------- cores
 C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN='' C_ACCENT=''

@@ -3,9 +3,10 @@
 Repositório: <https://github.com/NicolasBuscarini/terminal-dashboard>
 
 Painel de status do sistema exibido automaticamente ao abrir o terminal: CPU,
-memória, swap, **todos os discos** (SSD/HDD, partições, uso, I/O ao vivo e
-temperatura), rede, Wi-Fi, internet, **portas em escuta**, **benchmark em cache**,
-uptime, bateria e temperatura.
+memória, swap, **slots e geração da RAM** (DDR4/DDR5, frequência, fabricante,
+part number e temperatura), **todos os discos** (SSD/HDD, partições, uso, I/O ao
+vivo e temperatura), rede, Wi-Fi, internet, **portas em escuta**, **benchmark em
+cache**, uptime, bateria e temperatura.
 
 Por padrão o painel vem **completo** — todas as seções disponíveis. A composição
 é configurável por variáveis de ambiente: dá para esconder o que não interessa,
@@ -29,6 +30,9 @@ cache.
   CPU      █▍░░░░░░░░░░░░   10%   8 núcleos · carga 0.97 0.95 0.92
   MEM      ███████▏░░░░░░   51%   3.7 GiB / 7.1 GiB
   SWAP     ░░░░░░░░░░░░░░    0%   332.0 KiB / 3.9 GiB
+  RAM      DDR4 · 2400 MT/s · 2/2 slots · 8.0 GiB · 46 °C
+           ChannelA-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
+           ChannelB-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
 
   ▌ ARMAZENAMENTO ──────────────────────────────────────────────────────────────
   sda        HDD SATA   931.5 GiB  WDC WD10SPZX-21Z
@@ -93,6 +97,7 @@ tokens disponíveis:
 | `cpu` | uso de CPU, núcleos e carga média |
 | `mem` | memória RAM |
 | `swap` | swap |
+| `ram` | slots, geração DDR, frequência, fabricante e temperatura da RAM |
 | `disks` | discos e partições (detalhado por padrão) |
 | `net` | interface ativa, Wi-Fi/ethernet e taxas |
 | `internet` | IP local e teste de conectividade |
@@ -131,6 +136,7 @@ export SYSINFO_PANEL=compact
 | --- | --- | --- |
 | `SYSINFO_PANEL_COLUMNS=auto` | `auto` | `auto`, `1` ou `2`; em `auto`, duas colunas a partir de 96 colunas |
 | `SYSINFO_PANEL_DISKS=full` | `full` | `full` mostra partições e uso; `summary` mostra uma linha por disco |
+| `SYSINFO_PANEL_RAM=full` | `full` | `full` lista os slots; `summary` mostra só a linha-resumo; `off` esconde |
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` lista as portas; `summary` mostra só a linha-resumo |
 | `SYSINFO_PANEL_PORTS_MAX=0` | `0` | máximo de portas listadas no painel (`0` = todas) |
 | `SYSINFO_PANEL_BENCH=auto` | `auto` | `auto` usa o cache e refaz quando expira; `live` mede sempre; `cache` nunca mede; `off` esconde |
@@ -183,6 +189,55 @@ Como o tipo é detectado:
 
 O HDD de 1 TB deste notebook está **sem montagem** no momento, por isso aparece
 como `sem montagem` — nada é lido dele, apenas o I/O do dispositivo.
+
+## Memória RAM
+
+O painel mostra uma linha-resumo com geração, frequência, slots ocupados e
+temperatura; com `SYSINFO_PANEL_RAM=full` (padrão) também lista cada módulo.
+
+```bash
+sysinfo ram                 # detalhes completos
+sysinfo ram --update        # relê o DMI (pede sudo) e atualiza o cache
+```
+
+```
+  MEMÓRIA RAM
+  Fonte        dmidecode · cache há 2d
+  Total        8.0 GiB instalados · 2/2 slots · todos preenchidos
+  Tipo         DDR4 · 2400 MT/s (configurada) · 2666 MT/s (máxima)
+  Formato      SODIMM · rank 1
+  ECC          sem ECC
+  Máximo      32.0 GiB suportados
+  Temperatura  46 °C
+
+  Slots
+    ChannelA-DIMM0   SODIMM  4.0 GiB  Samsung  M471A5244CB0-CTD  DDR4-2400  1.2 V  rank 1
+    ChannelB-DIMM0   SODIMM  4.0 GiB  Samsung  M471A5244CB0-CTD  DDR4-2400  1.2 V  rank 1
+```
+
+O `dmidecode` precisa de root. Para o painel nunca pedir senha ao abrir o
+terminal, os detalhes ficam em cache:
+
+```bash
+sysinfo ram --update
+# ou, se preferir chamar o sudo explicitamente:
+sudo sysinfo ram --update
+```
+
+O cache fica em `${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo/dmidecode-memory`
+(permissão `600`, porque o dump contém números de série que **não** são
+exibidos). Sem cache, o painel tenta o EDAC (`/sys/devices/system/edac`) para
+tipo e slots e os sensores `hwmon` para temperatura; frequência e fabricante
+só aparecem com o DMI.
+
+Sensores de temperatura conhecidos: `spd5118` (DDR5) e `jc42` (DDR4). Muitos
+notebooks não expõem esses sensores; nesse caso a linha de temperatura é
+omitida. Para usar um dump já existente:
+
+```bash
+sudo env LC_ALL=C dmidecode -t memory > /tmp/ram.txt
+SYSINFO_RAM_DMI_FILE=/tmp/ram.txt sysinfo ram
+```
 
 ## Benchmark de velocidade
 
@@ -294,6 +349,7 @@ sysinfo
 | --- | --- |
 | `sysinfo` | painel (usado no `.bashrc`) |
 | `sysinfo disks` | discos, partições, uso, I/O e temperatura |
+| `sysinfo ram [--update]` | slots, geração, frequência, fabricante e temperatura da RAM |
 | `sysinfo ports [--all] [-v]` | portas em escuta, processo/container e detalhes |
 | `sysinfo bench [dir]` | benchmark sequencial no diretório |
 | `sysinfo --help` / `--version` | ajuda / versão |
@@ -319,13 +375,15 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL_HIDE=...` | — | tokens removidos da composição |
 | `SYSINFO_PANEL_COLUMNS=auto` | `auto` | `auto`, `1` ou `2` colunas |
 | `SYSINFO_PANEL_DISKS=full` | `full` | `full` (partições) ou `summary` |
+| `SYSINFO_PANEL_RAM=full` | `full` | `full` (slots), `summary` ou `off` |
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` (lista) ou `summary` |
 | `SYSINFO_PANEL_PORTS_MAX=0` | `0` | máximo de portas listadas (`0` = todas) |
 | `SYSINFO_PANEL_BENCH=auto` | `auto` | `auto`, `live`, `cache` ou `off` |
 | `SYSINFO_BENCH_PANEL_SIZE=32` | `32` | tamanho do bench rápido do painel, em MiB |
 | `SYSINFO_BENCH_TTL_DAYS=7` | `7` | validade do cache do bench, em dias |
 | `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
-| `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório do cache do bench |
+| `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório do cache do bench e da RAM |
+| `SYSINFO_RAM_DMI_FILE=...` | — | dump de `dmidecode -t memory` para os detalhes de RAM |
 
 Exemplos:
 
@@ -381,6 +439,7 @@ terminal-dashboard/
 │   ├── config.sh      # variáveis, cores, caracteres, largura e painel
 │   ├── ui.sh          # formatação, barras e linhas
 │   ├── system.sh      # seção SISTEMA (uptime, bateria, temperatura, serviços)
+│   ├── memory.sh      # slots, tipo, frequência e temperatura da RAM
 │   ├── disks.sh       # discos, filesystems e "sysinfo disks"
 │   ├── network.sh     # interface, Wi-Fi, taxas e internet
 │   ├── ports.sh       # portas, processos, containers e TIPO
@@ -413,3 +472,7 @@ Ferramentas opcionais (cada linha correspondente é omitida se faltar):
 | `ping` | `iputils-ping` | teste de internet |
 | `systemctl` | `systemd` | serviços com falha (só aparece se houver) |
 | `smartctl` | `smartmontools` | saúde SMART e temperatura de HDD em `sysinfo disks` |
+| `dmidecode` | `dmidecode` | slots, geração, frequência e fabricante da RAM em `sysinfo ram` |
+
+A temperatura da RAM depende do sensor exposto pelo hardware (`spd5118` em
+DDR5, `jc42` em DDR4); sem sensor, a linha é omitida.
