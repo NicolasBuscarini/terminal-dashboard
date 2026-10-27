@@ -1,5 +1,7 @@
 # terminal-dashboard
 
+Repositório: <https://github.com/NicolasBuscarini/terminal-dashboard>
+
 Painel de status do sistema exibido automaticamente ao abrir o terminal: CPU,
 memória, swap, **todos os discos** (SSD/HDD, uso, I/O ao vivo e temperatura),
 rede, Wi-Fi, internet, portas em escuta, uptime, bateria e temperatura.
