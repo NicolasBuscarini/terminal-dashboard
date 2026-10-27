@@ -85,6 +85,14 @@ render_network_link_row() {
       link_value="$link_value  ${net_col}${arrow_down}$(fmt_rate_short "$rx_rate")${C_RESET} ${net_col}${arrow_up}$(fmt_rate_short "$tx_rate")${C_RESET}"
     else
       link_value="$link_value   ${net_col}${arrow_down} $(fmt_bytes "$rx_rate")/s${C_RESET}  ${net_col}${arrow_up} $(fmt_bytes "$tx_rate")/s${C_RESET}"
+      # SSID longo + taxas podem estourar a largura: cai para o formato compacto.
+      local plain
+      plain=$(strip_ansi "$link_value")
+      if (( ${#plain} > cols - 2 )); then
+        link_value="$C_BOLD$iface$C_RESET"
+        [[ -n ${ssid:-} ]] && link_value="$link_value  ${C_DIM}${ssid}${C_RESET}"
+        link_value="$link_value  ${net_col}${arrow_down}$(fmt_rate_short "$rx_rate")${C_RESET} ${net_col}${arrow_up}$(fmt_rate_short "$tx_rate")${C_RESET}"
+      fi
     fi
     printf '  %s\n' "$link_value"
   else
