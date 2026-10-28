@@ -89,7 +89,7 @@ Uso:
   sysinfo ports            lista as portas TCP em escuta e o processo/docker
   sysinfo ports --all      lista TCP + UDP
   sysinfo ports -v         mostra diretório e linha de comando do processo
-  sysinfo bench [dir]      benchmark de escrita/leitura sequencial
+  sysinfo bench [tipo] [dir]  benchmark: seq (padrão), 4k, mem, cpu ou all
   sysinfo --help           mostra esta ajuda
   sysinfo --version        mostra a versão
 
@@ -101,7 +101,10 @@ Variáveis de ambiente:
   SYSINFO_NET_CHECK=0        não testa conectividade com a internet
   SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet, em s
   SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
-  SYSINFO_BENCH_SIZE=256     tamanho do benchmark do CLI, em MiB
+  SYSINFO_BENCH_SIZE=256     tamanho do benchmark sequencial, em MiB
+  SYSINFO_BENCH_4K_SIZE=16   tamanho do benchmark de 4 KiB, em MiB
+  SYSINFO_BENCH_MEM_SIZE=64  tamanho do benchmark de memória, em MiB
+  SYSINFO_BENCH_CPU_SIZE=64  MiB por thread no benchmark de CPU
   SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
   SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
 
@@ -122,9 +125,10 @@ Detalhes e desempenho:
   SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
   SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
   SYSINFO_PANEL_BENCH=auto   auto (refaz se o cache expirou), live, cache, off
+  SYSINFO_PANEL_BENCH_EXTRA=auto  auto (cache válido), cache (cache antigo) ou off
   SYSINFO_BENCH_PANEL_SIZE=32  tamanho do bench rápido do painel, em MiB
   SYSINFO_BENCH_TTL_DAYS=7   validade do cache do bench, em dias
-  SYSINFO_CACHE_DIR=...      cache do bench e da RAM (padrão: XDG_CACHE_HOME/sysinfo)
+  SYSINFO_CACHE_DIR=...      caches dos benchmarks e da RAM (XDG_CACHE_HOME/sysinfo)
   SYSINFO_RAM_DMI_FILE=...   dump de "dmidecode -t memory" para os detalhes de RAM
 
 Exemplos:
@@ -143,7 +147,7 @@ case ${1:-} in
   cpu|processor|--cpu) mode=cpu ;;
   gpu|video|vga|--gpu) mode=gpu ;;
   ram|mem|memory|--ram) mode=ram ;;
-  bench|--bench) mode=bench; bench_target=${2:-$HOME} ;;
+  bench|--bench) mode=bench ;;
   '') ;;
   *) printf 'sysinfo: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
 esac
@@ -182,6 +186,6 @@ case $mode in
   cpu) shift; show_cpu "$@" ;;
   gpu) shift; show_gpu "$@" ;;
   ram) shift; show_ram "$@" ;;
-  bench) show_bench "$bench_target" ;;
+  bench) shift; show_bench "$@" ;;
   panel) render_panel ;;
 esac

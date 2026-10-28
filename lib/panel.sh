@@ -266,12 +266,18 @@ render_swap_row() {
 }
 
 render_processing_section() {
-  panel_any cpu mem swap ram || return 0
+  panel_any cpu mem swap || return 0
   section 'PROCESSAMENTO'
   panel_on cpu && render_cpu_row
   panel_on mem && render_mem_row
   panel_on swap && render_swap_row
-  panel_on ram && render_ram_rows
+}
+
+render_ram_section() {
+  panel_on ram || return 0
+  [[ $panel_ram == off ]] && return 0
+  section 'MEMÓRIA RAM'
+  render_ram_rows
 }
 
 # ---------------------------------------------------------------- armazenamento
@@ -358,11 +364,55 @@ render_bench_row() {
   fi
 }
 
+# Resultados dos benchmarks extras (4K, memória e CPU) já presentes no cache.
+# Por padrão o painel não mede esses testes ao abrir o terminal: rode
+# "sysinfo bench all" uma vez para preenchê-los.
+render_bench_extra_rows() {
+  [[ $panel_bench == off || $panel_bench_extra == off ]] && return 0
+
+  local maxw=$(( cols - 11 ))
+  (( maxw < 1 )) && maxw=1
+  local line
+
+  if bench_4k_cache_load; then
+    if [[ $panel_bench_extra == cache ]] || bench_cache_fresh "$BC4_TS"; then
+      if (( compact || cols < 60 )); then
+        line="E $(fmt_iops "$BC4_WRITE_IOPS") ${dot} L $(fmt_iops "$BC4_READ_IOPS") IOPS"
+      else
+        line="E $(fmt_iops "$BC4_WRITE_IOPS") IOPS ${dot} L $(fmt_iops "$BC4_READ_IOPS") IOPS"
+      fi
+      line=$(fit_text "$line" "$maxw")
+      emit_row '4K' "$line"
+    fi
+  fi
+
+  if bench_mem_cache_load; then
+    if [[ $panel_bench_extra == cache ]] || bench_cache_fresh "$BCM_TS"; then
+      line="E $(fmt_speed "$BCM_WRITE_MB") ${dot} L $(fmt_speed "$BCM_READ_MB")"
+      line=$(fit_text "$line" "$maxw")
+      emit_row 'RAM' "$line"
+    fi
+  fi
+
+  if bench_cpu_cache_load; then
+    if [[ $panel_bench_extra == cache ]] || bench_cache_fresh "$BCC_TS"; then
+      if (( compact || cols < 70 )); then
+        line="$(fmt_speed "$BCC_SINGLE_MB") ${dot} $(fmt_speed "$BCC_MULTI_MB") (${BCC_THREADS}T)"
+      else
+        line="1 thread $(fmt_speed "$BCC_SINGLE_MB") ${dot} ${BCC_THREADS} threads $(fmt_speed "$BCC_MULTI_MB")"
+      fi
+      line=$(fit_text "$line" "$maxw")
+      emit_row 'CPU' "$line"
+    fi
+  fi
+}
+
 render_bench_section() {
   panel_on bench || return 0
   [[ $panel_bench == off ]] && return 0
   section 'DESEMPENHO'
   render_bench_row
+  render_bench_extra_rows
 }
 
 # ===================================================================== painel
@@ -433,7 +483,7 @@ render_panel() {
 
   # Em terminais largos, PROCESSAMENTO e SISTEMA dividem a primeira faixa.
   local two_cols=0
-  if [[ $panel_columns != 1 ]] && panel_any cpu mem swap ram && panel_any uptime battery temp services; then
+  if [[ $panel_columns != 1 ]] && panel_any cpu mem swap && panel_any uptime battery temp services; then
     if [[ $panel_columns == 2 ]]; then
       (( cols >= 90 )) && two_cols=1
     else
@@ -447,6 +497,7 @@ render_panel() {
     left=$(render_block render_processing_section "$w")
     right=$(render_block render_system_section "$w")
     print_columns "$left" "$right" "$w"
+    render_ram_section
     render_gpu_section
     render_storage_section
     render_network_section
@@ -454,6 +505,7 @@ render_panel() {
     render_bench_section
   else
     render_processing_section
+    render_ram_section
     render_gpu_section
     render_storage_section
     render_network_section

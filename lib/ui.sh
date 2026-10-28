@@ -53,6 +53,18 @@ fmt_speed() {
   fi
 }
 
+# IOPS -> "950", "12.3k" ou "1.2M" (benchmark de 4 KiB).
+fmt_iops() {
+  local n=$1
+  if (( n >= 1000000 )); then
+    printf '%d.%dM' $(( n / 1000000 )) $(( (n % 1000000) / 100000 ))
+  elif (( n >= 1000 )); then
+    printf '%d.%dk' $(( n / 1000 )) $(( (n % 1000) / 100 ))
+  else
+    printf '%d' "$n"
+  fi
+}
+
 # MHz -> "1.6 GHz" ou "800 MHz" (CPU/GPU).
 fmt_freq_mhz() {
   local mhz=$1

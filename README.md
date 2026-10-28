@@ -7,8 +7,8 @@ Painel de status do sistema exibido automaticamente ao abrir o terminal: **CPU**
 **slots e geração da RAM** (DDR4/DDR5, frequência, fabricante, part number e
 temperatura), **placa de vídeo** (VRAM, uso, temperatura e tipo), **todos os
 discos** (SSD/HDD, partições, uso, I/O ao vivo e temperatura), rede, Wi-Fi,
-internet, **portas em escuta**, **benchmark em cache**, uptime, bateria e
-temperatura.
+internet, **portas em escuta**, **benchmarks em cache** (disco sequencial, 4 KiB,
+memória e CPU), uptime, bateria e temperatura.
 
 Por padrão o painel vem **completo** — todas as seções disponíveis. A composição
 é configurável por variáveis de ambiente: dá para esconder o que não interessa,
@@ -33,6 +33,8 @@ cache.
            Intel Core i5-8250U · iGPU UHD Graphics 620 · carga 0.97 0.95 0.92
   MEM      ███████▏░░░░░░   51%   3.7 GiB / 7.1 GiB
   SWAP     ░░░░░░░░░░░░░░    0%   332.0 KiB / 3.9 GiB
+
+  ▌ MEMÓRIA RAM ────────────────────────────────────────────────────────────────
   RAM      DDR4 · 2400 MT/s · 2/2 slots · 8.0 GiB · 46 °C
            ChannelA-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
            ChannelB-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
@@ -75,13 +77,16 @@ cache.
   ▌ DESEMPENHO ─────────────────────────────────────────────────────────────────
   BENCH    E 774 MB/s · L 1.0 GB/s
            nvme0n1 SSD NVMe · agora
+  4K       E 29.1k IOPS · L 36.4k IOPS
+  RAM      E 1.7 GB/s · L 3.6 GB/s
+  CPU      1 thread 162 MB/s · 8 threads 586 MB/s
 
   ▌ SISTEMA ────────────────────────────────────────────────────────────────────
   UPTIME   no ar há 1h 3m · 309 processos · 1 usuário
   BATERIA  100% · cheia
   TEMP     60 °C
 
-  sysinfo disks · ports · bench · --help
+  sysinfo cpu · gpu · ram · disks · ports · bench · --help
 ```
 
 As barras ficam verdes até 60%, amarelas até 85% e vermelhas acima disso. As
@@ -92,7 +97,8 @@ Linhas que não fazem sentido no seu hardware (bateria, temperatura, Wi-Fi) ou
 cuja ferramenta não está instalada simplesmente não aparecem. O layout é
 responsivo: em terminais estreitos as seções compactam, a tabela de portas vira
 resumo e os discos perdem as partições; em terminais largos (≥ 96 colunas)
-PROCESSAMENTO e SISTEMA dividem a mesma faixa.
+PROCESSAMENTO e SISTEMA dividem a mesma faixa. A RAM tem seção própria
+(MEMÓRIA RAM) em qualquer largura.
 
 ## Composição do painel
 
@@ -104,14 +110,14 @@ tokens disponíveis:
 | `header` | cabeçalho com usuário, host, distro e kernel |
 | `cpu` | uso, núcleos/threads, temperatura, modelo e iGPU |
 | `gpu` | GPUs detectadas: nome, tipo, VRAM, uso e temperatura |
-| `mem` | memória RAM |
+| `mem` | uso da memória RAM (linha do PROCESSAMENTO) |
 | `swap` | swap |
-| `ram` | slots, geração DDR, frequência, fabricante e temperatura da RAM |
+| `ram` | seção MEMÓRIA RAM: slots, geração DDR, frequência, fabricante e temperatura |
 | `disks` | discos e partições (detalhado por padrão) |
 | `net` | interface ativa, Wi-Fi/ethernet e taxas |
 | `internet` | IP local e teste de conectividade |
 | `ports` | portas em escuta (tabela por padrão) |
-| `bench` | benchmark sequencial em cache |
+| `bench` | benchmarks em cache (sequencial, 4K, memória e CPU) |
 | `uptime` | tempo no ar, processos e usuários |
 | `battery` | bateria (se houver) |
 | `temp` | temperatura (se disponível) |
@@ -151,13 +157,15 @@ export SYSINFO_PANEL=compact
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` lista as portas; `summary` mostra só a linha-resumo |
 | `SYSINFO_PANEL_PORTS_MAX=0` | `0` | máximo de portas listadas no painel (`0` = todas) |
 | `SYSINFO_PANEL_BENCH=auto` | `auto` | `auto` usa o cache e refaz quando expira; `live` mede sempre; `cache` nunca mede; `off` esconde |
+| `SYSINFO_PANEL_BENCH_EXTRA=auto` | `auto` | `auto` mostra 4K/RAM/CPU com cache válido; `cache` mostra cache vencido; `off` esconde |
 | `SYSINFO_BENCH_PANEL_SIZE=32` | `32` | tamanho do bench rápido do painel, em MiB |
 | `SYSINFO_BENCH_TTL_DAYS=7` | `7` | validade do cache do bench, em dias |
 | `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
 
-O painel nunca espera um benchmark lento ao abrir o terminal: ele usa o cache em
-`${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo/bench` e só mede de novo quando o cache
-não existe ou expirou. `sysinfo bench` também grava nesse cache.
+O painel nunca espera um benchmark lento ao abrir o terminal: ele usa os caches
+em `${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo` (`bench`, `bench-4k`, `bench-mem`,
+`bench-cpu`) e só mede o sequencial de novo quando o cache não existe ou
+expirou. `sysinfo bench` também grava nesses caches.
 
 
 ## Discos
@@ -203,8 +211,10 @@ como `sem montagem` — nada é lido dele, apenas o I/O do dispositivo.
 
 ## Memória RAM
 
-O painel mostra uma linha-resumo com geração, frequência, slots ocupados e
-temperatura; com `SYSINFO_PANEL_RAM=full` (padrão) também lista cada módulo.
+A RAM tem uma seção própria (**MEMÓRIA RAM**), logo depois de PROCESSAMENTO,
+com uma linha-resumo de geração, frequência, slots ocupados e temperatura; com
+`SYSINFO_PANEL_RAM=full` (padrão) também lista cada módulo. `SYSINFO_PANEL_RAM=off`
+remove a seção, e o token `ram` continua disponível para a composição.
 
 ```bash
 sysinfo ram                 # detalhes completos
@@ -350,13 +360,25 @@ fica `n/d`. Em `SYSINFO_PANEL_GPU=summary` cada GPU ocupa uma linha; `off`
 remove a seção. Sem nenhuma GPU detectada, o painel mostra `nenhuma GPU
 detectada` em vez de esconder a seção.
 
-## Benchmark de velocidade
+## Benchmarks
 
-Mede escrita e leitura sequencial no sistema de arquivos de um diretório:
+O `sysinfo bench` tem quatro testes. Cada um grava um cache próprio em
+`${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo`, reaproveitado pelo painel:
+
+| Tipo | O que mede | Cache |
+| --- | --- | --- |
+| `seq` (padrão) | escrita/leitura sequencial de blocos grandes | `bench` |
+| `4k` | blocos de 4 KiB: IOPS e MB/s | `bench-4k` |
+| `mem` | banda de escrita/leitura em `/dev/shm` (tmpfs) | `bench-mem` |
+| `cpu` | throughput de SHA-256 em 1 e em N threads | `bench-cpu` |
 
 ```bash
-sysinfo bench                 # testa a home
-sysinfo bench /mnt/dados      # testa outro disco montado
+sysinfo bench                 # sequencial na home
+sysinfo bench /mnt/dados      # sequencial em outro disco
+sysinfo bench 4k /mnt/dados   # blocos de 4 KiB no disco
+sysinfo bench mem             # banda de memória (/dev/shm)
+sysinfo bench cpu             # CPU com SHA-256
+sysinfo bench all             # todos os testes acima
 SYSINFO_BENCH_SIZE=1024 sysinfo bench
 ```
 
@@ -372,15 +394,59 @@ SYSINFO_BENCH_SIZE=1024 sysinfo bench
   Arquivo temporário removido.
 ```
 
-O teste grava um arquivo temporário de `SYSINFO_BENCH_SIZE` MiB (padrão 256),
-mede e apaga. A leitura usa `O_DIRECT` para não vir do cache; se o sistema de
-arquivos não suportar, cai para leitura normal e marca com `*`.
+```
+  BENCHMARK 4K (blocos de 4 KiB)
+  /home/nicolas-buscarini · nvme0n1 · SSD NVMe
 
-No painel, o benchmark usa um cache compartilhado com o comando acima. Com
-`SYSINFO_PANEL_BENCH=auto` (padrão), ele só mede quando o cache não existe ou
-passou de `SYSINFO_BENCH_TTL_DAYS` dias; a medição do painel é rápida
-(`SYSINFO_BENCH_PANEL_SIZE`, padrão 32 MiB). Use `live` para medir a cada
-abertura, `cache` para nunca medir no painel ou `off` para esconder a seção.
+  Testando 16 MiB em 4096 blocos...
+
+  Escrita  29.1k IOPS   116 MB/s   (0.14 s)
+  Leitura  36.4k IOPS   145 MB/s   (0.11 s)
+
+  Arquivo temporário removido.
+```
+
+```
+  BENCHMARK DE MEMÓRIA (tmpfs)
+  /dev/shm · 64 MiB
+
+  Escrita  1.7 GB/s   (0.04 s)
+  Leitura  3.6 GB/s   (0.02 s)
+
+  Arquivo temporário removido.
+```
+
+```
+  BENCHMARK DE CPU (SHA-256)
+  Intel Core i5-8250U
+  64 MiB por thread · 8 threads
+
+  1 thread   162 MB/s   (0.39 s)
+  8 threads  586 MB/s   (0.87 s)
+
+  Quanto maior, melhor. O resultado varia com a carga e o governador da CPU.
+```
+
+O teste sequencial grava um arquivo temporário de `SYSINFO_BENCH_SIZE` MiB
+(padrão 256), mede e apaga. A leitura usa `O_DIRECT` para não vir do cache; se o
+sistema de arquivos não suportar, cai para leitura normal e marca com `*`. O
+teste `4k` faz o mesmo com blocos de 4 KiB (`SYSINFO_BENCH_4K_SIZE`, padrão 16
+MiB) e reporta IOPS.
+
+O teste `mem` usa `/dev/shm` (tmpfs) e reduz o tamanho automaticamente se faltar
+espaço, deixando uma folga de 8 MiB (`SYSINFO_BENCH_MEM_SIZE`, padrão 64 MiB).
+O teste `cpu` usa `sha256sum` em `SYSINFO_BENCH_CPU_SIZE` MiB por thread (padrão
+64) e roda uma vez com 1 thread e outra com `nproc` threads
+(`SYSINFO_BENCH_CPU_THREADS` sobrescreve).
+
+No painel, com `SYSINFO_PANEL_BENCH=auto` (padrão), só o teste sequencial é
+medido quando o cache não existe ou passou de `SYSINFO_BENCH_TTL_DAYS` dias; a
+medição do painel é rápida (`SYSINFO_BENCH_PANEL_SIZE`, padrão 32 MiB). Os
+testes `4k`, `mem` e `cpu` aparecem no painel apenas quando já existe cache
+válido — rode `sysinfo bench all` uma vez para preenchê-los. Use
+`SYSINFO_PANEL_BENCH_EXTRA=cache` para mostrar também caches vencidos ou `off`
+para esconder os extras. `SYSINFO_PANEL_BENCH=live` refaz o sequencial a cada
+abertura; `cache` nunca mede no painel e `off` esconde a seção.
 
 ## Portas em escuta
 
@@ -464,7 +530,7 @@ sysinfo
 | `sysinfo disks` | discos, partições, uso, I/O e temperatura |
 | `sysinfo ram [--update]` | slots, geração, frequência, fabricante e temperatura da RAM |
 | `sysinfo ports [--all] [-v]` | portas em escuta, processo/container e detalhes |
-| `sysinfo bench [dir]` | benchmark sequencial no diretório |
+| `sysinfo bench [tipo] [dir]` | benchmark: `seq` (padrão), `4k`, `mem`, `cpu` ou `all` |
 | `sysinfo --help` / `--version` | ajuda / versão |
 
 ## Configuração
@@ -481,7 +547,11 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_NET_CHECK=0` | `1` | desativa o teste de internet |
 | `SYSINFO_NET_TIMEOUT=0.5` | `0.5` | tempo máximo do teste de internet (s) |
 | `SYSINFO_PING_HOST=1.1.1.1` | `1.1.1.1` | host usado no teste de internet |
-| `SYSINFO_BENCH_SIZE=256` | `256` | tamanho do benchmark do CLI, em MiB (8 a 4096) |
+| `SYSINFO_BENCH_SIZE=256` | `256` | tamanho do benchmark sequencial, em MiB (8 a 4096) |
+| `SYSINFO_BENCH_4K_SIZE=16` | `16` | tamanho do benchmark de 4 KiB, em MiB (4 a 512) |
+| `SYSINFO_BENCH_MEM_SIZE=64` | `64` | tamanho do benchmark de memória, em MiB (16 a 2048) |
+| `SYSINFO_BENCH_CPU_SIZE=64` | `64` | MiB por thread no benchmark de CPU (8 a 1024) |
+| `SYSINFO_BENCH_CPU_THREADS=...` | `nproc` | número de threads do benchmark de CPU |
 | `SYSINFO_DISKS_DELAY=0.3` | `0.3` | janela de amostragem de I/O em `sysinfo disks` |
 | `SYSINFO_DOCKER_CHECK=0` | `1` | não consulta o Docker ao listar portas |
 | `SYSINFO_PANEL=all` | `all` | composição: `all`, `compact`, `none` ou lista de tokens |
@@ -494,10 +564,11 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` (lista) ou `summary` |
 | `SYSINFO_PANEL_PORTS_MAX=0` | `0` | máximo de portas listadas (`0` = todas) |
 | `SYSINFO_PANEL_BENCH=auto` | `auto` | `auto`, `live`, `cache` ou `off` |
+| `SYSINFO_PANEL_BENCH_EXTRA=auto` | `auto` | `auto` (cache válido), `cache` (cache vencido) ou `off` |
 | `SYSINFO_BENCH_PANEL_SIZE=32` | `32` | tamanho do bench rápido do painel, em MiB |
 | `SYSINFO_BENCH_TTL_DAYS=7` | `7` | validade do cache do bench, em dias |
 | `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
-| `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório do cache do bench e da RAM |
+| `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório dos caches dos benchmarks e da RAM |
 | `SYSINFO_RAM_DMI_FILE=...` | — | dump de `dmidecode -t memory` para os detalhes de RAM |
 | `SYSINFO_CPU_HWMON_DIR=...` | `/sys/class/hwmon` | diretório dos sensores da CPU (útil em testes) |
 | `SYSINFO_CPU_THERMAL_DIR=...` | `/sys/class/thermal` | diretório das zonas térmicas (alternativa) |
@@ -563,8 +634,8 @@ terminal-dashboard/
 │   ├── disks.sh       # discos, filesystems e "sysinfo disks"
 │   ├── network.sh     # interface, Wi-Fi, taxas e internet
 │   ├── ports.sh       # portas, processos, containers e TIPO
-│   ├── bench.sh       # benchmark sequencial e cache
-│   └── panel.sh       # composição dinâmica, CPU/RAM/SWAP e layout
+│   ├── bench.sh       # benchmarks sequencial, 4K, memória e CPU + caches
+│   └── panel.sh       # composição dinâmica, CPU/RAM/SWAP, GPU e layout
 ├── install.sh         # instala comando + gancho no .bashrc
 ├── uninstall.sh       # remove comando + gancho
 └── README.md
@@ -577,8 +648,11 @@ uma responsabilidade única e pode ser testado isoladamente com `bash -n`.
 ## Requisitos
 
 - Linux (usa `/proc` e `/sys`)
-- bash 4+ e coreutils (`awk`, `dd`, `df`, `nproc`, `tput`, `sort`)
+- bash 4+ e coreutils (`awk`, `dd`, `df`, `mktemp`, `nproc`, `sha256sum`,
+  `tput`, `sort`)
 - `util-linux` (`lsblk`) para detectar discos e partições
+- `/dev/shm` (tmpfs) para o benchmark de memória; sem ele, use
+  `sysinfo bench mem /outro/diretorio`
 - Terminal com suporte a UTF-8 para as barras; sem UTF-8 ele cai
   automaticamente para `#`, `-` e `|`
 

@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.5.0
+version=2.6.0
 probe_file=''
 bench_file=''
 
@@ -29,6 +29,21 @@ bench_size=${SYSINFO_BENCH_SIZE:-256}
 [[ $bench_size =~ ^[0-9]+$ ]] || bench_size=256
 (( bench_size < 8 )) && bench_size=8
 (( bench_size > 4096 )) && bench_size=4096
+
+bench_4k_size=${SYSINFO_BENCH_4K_SIZE:-16}
+[[ $bench_4k_size =~ ^[0-9]+$ ]] || bench_4k_size=16
+(( bench_4k_size < 4 )) && bench_4k_size=4
+(( bench_4k_size > 512 )) && bench_4k_size=512
+
+bench_mem_size=${SYSINFO_BENCH_MEM_SIZE:-64}
+[[ $bench_mem_size =~ ^[0-9]+$ ]] || bench_mem_size=64
+(( bench_mem_size < 16 )) && bench_mem_size=16
+(( bench_mem_size > 2048 )) && bench_mem_size=2048
+
+bench_cpu_size=${SYSINFO_BENCH_CPU_SIZE:-64}
+[[ $bench_cpu_size =~ ^[0-9]+$ ]] || bench_cpu_size=64
+(( bench_cpu_size < 8 )) && bench_cpu_size=8
+(( bench_cpu_size > 1024 )) && bench_cpu_size=1024
 
 disks_delay=${SYSINFO_DISKS_DELAY:-0.3}
 [[ $disks_delay =~ ^[0-9]+([.,][0-9]+)?$ ]] || disks_delay=0.3
@@ -66,6 +81,12 @@ case $panel_bench in
   *) panel_bench=auto ;;
 esac
 
+panel_bench_extra=${SYSINFO_PANEL_BENCH_EXTRA:-auto}
+case $panel_bench_extra in
+  auto|cache|off) ;;
+  *) panel_bench_extra=auto ;;
+esac
+
 panel_ram=${SYSINFO_PANEL_RAM:-full}
 case $panel_ram in
   full|summary|off) ;;
@@ -96,6 +117,9 @@ bench_ttl_days=${SYSINFO_BENCH_TTL_DAYS:-7}
 
 bench_cache_dir=${SYSINFO_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo}
 bench_cache_file=$bench_cache_dir/bench
+bench_4k_cache_file=$bench_cache_dir/bench-4k
+bench_mem_cache_file=$bench_cache_dir/bench-mem
+bench_cpu_cache_file=$bench_cache_dir/bench-cpu
 
 # Cache do dmidecode com os detalhes dos módulos de RAM. O painel nunca pede
 # senha: usa o cache criado por "sysinfo ram --update".
