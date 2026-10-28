@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.4.0
+version=2.5.0
 probe_file=''
 bench_file=''
 
@@ -41,6 +41,18 @@ docker_check=${SYSINFO_DOCKER_CHECK:-1}
 #                        uptime battery temp services
 panel_mode=${SYSINFO_PANEL:-all}
 panel_hide=${SYSINFO_PANEL_HIDE:-}
+
+panel_cpu=${SYSINFO_PANEL_CPU:-full}
+case $panel_cpu in
+  full|summary|off) ;;
+  *) panel_cpu=full ;;
+esac
+
+panel_gpu=${SYSINFO_PANEL_GPU:-full}
+case $panel_gpu in
+  full|summary|off) ;;
+  *) panel_gpu=full ;;
+esac
 
 panel_disks=${SYSINFO_PANEL_DISKS:-full}
 [[ $panel_disks == full || $panel_disks == summary ]] || panel_disks=full
@@ -91,6 +103,11 @@ memory_cache_dir=$bench_cache_dir
 memory_cache_file=$memory_cache_dir/dmidecode-memory
 memory_hwmon_dir=${SYSINFO_RAM_HWMON_DIR:-/sys/class/hwmon}
 memory_edac_dir=${SYSINFO_RAM_EDAC_DIR:-/sys/devices/system/edac/mc}
+
+# Sensores do processador e dispositivos de vídeo (sysfs).
+cpu_hwmon_dir=${SYSINFO_CPU_HWMON_DIR:-/sys/class/hwmon}
+cpu_thermal_dir=${SYSINFO_CPU_THERMAL_DIR:-/sys/class/thermal}
+gpu_drm_dir=${SYSINFO_GPU_DRM_DIR:-/sys/class/drm}
 
 # --------------------------------------------------------------------- cores
 C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN='' C_ACCENT=''

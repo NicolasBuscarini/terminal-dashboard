@@ -2,11 +2,13 @@
 
 Repositório: <https://github.com/NicolasBuscarini/terminal-dashboard>
 
-Painel de status do sistema exibido automaticamente ao abrir o terminal: CPU,
-memória, swap, **slots e geração da RAM** (DDR4/DDR5, frequência, fabricante,
-part number e temperatura), **todos os discos** (SSD/HDD, partições, uso, I/O ao
-vivo e temperatura), rede, Wi-Fi, internet, **portas em escuta**, **benchmark em
-cache**, uptime, bateria e temperatura.
+Painel de status do sistema exibido automaticamente ao abrir o terminal: **CPU**
+(modelo, marca, núcleos/threads, frequência, iGPU e temperatura), memória, swap,
+**slots e geração da RAM** (DDR4/DDR5, frequência, fabricante, part number e
+temperatura), **placa de vídeo** (VRAM, uso, temperatura e tipo), **todos os
+discos** (SSD/HDD, partições, uso, I/O ao vivo e temperatura), rede, Wi-Fi,
+internet, **portas em escuta**, **benchmark em cache**, uptime, bateria e
+temperatura.
 
 Por padrão o painel vem **completo** — todas as seções disponíveis. A composição
 é configurável por variáveis de ambiente: dá para esconder o que não interessa,
@@ -27,12 +29,18 @@ cache.
   ══════════════════════════════════════════════════════════════════════════════
 
   ▌ PROCESSAMENTO ──────────────────────────────────────────────────────────────
-  CPU      █▍░░░░░░░░░░░░   10%   8 núcleos · carga 0.97 0.95 0.92
+  CPU      █▍░░░░░░░░░░░░   10%   4 núcleos · 8 threads · 57 °C
+           Intel Core i5-8250U · iGPU UHD Graphics 620 · carga 0.97 0.95 0.92
   MEM      ███████▏░░░░░░   51%   3.7 GiB / 7.1 GiB
   SWAP     ░░░░░░░░░░░░░░    0%   332.0 KiB / 3.9 GiB
   RAM      DDR4 · 2400 MT/s · 2/2 slots · 8.0 GiB · 46 °C
            ChannelA-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
            ChannelB-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
+
+  ▌ PLACA DE VÍDEO ─────────────────────────────────────────────────────────────
+  GPU      Intel UHD Graphics 620 · integrada · i915
+           VRAM compartilhada · uso n/d · temp n/d
+  DEDICADA nenhuma placa dedicada detectada
 
   ▌ ARMAZENAMENTO ──────────────────────────────────────────────────────────────
   sda        HDD SATA   931.5 GiB  WDC WD10SPZX-21Z
@@ -94,7 +102,8 @@ tokens disponíveis:
 | Token | Seção/linha |
 | --- | --- |
 | `header` | cabeçalho com usuário, host, distro e kernel |
-| `cpu` | uso de CPU, núcleos e carga média |
+| `cpu` | uso, núcleos/threads, temperatura, modelo e iGPU |
+| `gpu` | GPUs detectadas: nome, tipo, VRAM, uso e temperatura |
 | `mem` | memória RAM |
 | `swap` | swap |
 | `ram` | slots, geração DDR, frequência, fabricante e temperatura da RAM |
@@ -108,8 +117,8 @@ tokens disponíveis:
 | `temp` | temperatura (se disponível) |
 | `services` | serviços systemd com falha (só aparece se houver) |
 
-Presets prontos: `all`, `compact` (sem bench e serviços), `minimal` (alias) e
-`none` (painel vazio). Também há aliases: `memory` = `mem`, `network`/`wifi` =
+Presets prontos: `all`, `compact` (sem bench e serviços, mas com CPU e GPU),
+`minimal` (alias) e `none` (painel vazio). Também há aliases: `memory` = `mem`, `network`/`wifi` =
 `net,internet`, `load` = `cpu`.
 
 ```bash
@@ -135,6 +144,8 @@ export SYSINFO_PANEL=compact
 | Variável | Padrão | Efeito |
 | --- | --- | --- |
 | `SYSINFO_PANEL_COLUMNS=auto` | `auto` | `auto`, `1` ou `2`; em `auto`, duas colunas a partir de 96 colunas |
+| `SYSINFO_PANEL_CPU=full` | `full` | `full` mostra modelo/iGPU; `summary` só a linha de uso; `off` esconde |
+| `SYSINFO_PANEL_GPU=full` | `full` | `full` mostra VRAM/uso/temp; `summary` uma linha por GPU; `off` esconde |
 | `SYSINFO_PANEL_DISKS=full` | `full` | `full` mostra partições e uso; `summary` mostra uma linha por disco |
 | `SYSINFO_PANEL_RAM=full` | `full` | `full` lista os slots; `summary` mostra só a linha-resumo; `off` esconde |
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` lista as portas; `summary` mostra só a linha-resumo |
@@ -238,6 +249,106 @@ omitida. Para usar um dump já existente:
 sudo env LC_ALL=C dmidecode -t memory > /tmp/ram.txt
 SYSINFO_RAM_DMI_FILE=/tmp/ram.txt sysinfo ram
 ```
+
+## Processador (CPU)
+
+No painel, a linha da CPU mostra uso, núcleos físicos, threads e temperatura. Em
+terminais com 70 colunas ou mais aparece uma segunda linha com o modelo, o vídeo
+integrado e a carga média:
+
+```
+  CPU      █▍░░░░░░░░░░░░   10%   4 núcleos · 8 threads · 57 °C
+           Intel Core i5-8250U · iGPU UHD Graphics 620 · carga 0.97 0.95 0.92
+```
+
+Para ver todos os detalhes:
+
+```bash
+sysinfo cpu                 # também aceita: processor, --cpu
+```
+
+```
+  PROCESSADOR
+  Modelo       Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz
+  Marca        Intel
+  Núcleos      4 núcleos · 8 threads
+  Frequência   1.6 GHz (base) · 3.4 GHz (máx.)
+  Atual        2.9 GHz
+  Cache L3     6.0 MiB
+  Governador   powersave
+  Vídeo        Intel UHD Graphics 620 (i915)
+  Temperatura  57 °C (Package id 0)
+```
+
+De onde vêm os dados (tudo sem root):
+
+- modelo e marca: `/proc/cpuinfo` (`model name`/`Processor` e `vendor_id`),
+  com `lscpu` como alternativa;
+- núcleos, threads e soquetes: topologia em `/sys/devices/system/cpu/cpu*/topology`;
+- frequência base, máxima e atual, cache L3 e governador: `cpufreq` e
+  `/sys/devices/system/cpu/cpu0/cache`;
+- temperatura: sensores `coretemp` (Intel), `k10temp`/`zenpower` (AMD) e, como
+  alternativa, `thermal_zone` (`x86_pkg_temp`, `cpu-thermal`…);
+- vídeo integrado: a mesma detecção da seção de GPU (`i915`, `amdgpu`, `xe`…).
+
+Sem sensor de temperatura, a linha é omitida — nada de valor inventado. Em
+`SYSINFO_PANEL_CPU=summary` o painel mostra só a linha de uso; `off` remove a
+CPU da composição.
+
+## Placa de vídeo (GPU)
+
+A seção **PLACA DE VÍDEO** aparece em largura total logo depois de
+PROCESSAMENTO. Ela lista todas as GPUs, com nome, marca, tipo, driver, VRAM,
+uso e temperatura. Quando não há placa dedicada, isso fica explícito:
+
+```
+  ▌ PLACA DE VÍDEO ─────────────────────────────────────────────────────────────
+  GPU      Intel UHD Graphics 620 · integrada · i915
+           VRAM compartilhada · uso n/d · temp n/d
+  DEDICADA nenhuma placa dedicada detectada
+```
+
+Com uma GPU dedicada, as métricas aparecem normalmente:
+
+```
+  GPU      AMD Radeon RX 6600 · dedicada · amdgpu
+           VRAM 2.0 GiB / 8.0 GiB · uso 37% · temp 62 °C
+```
+
+```bash
+sysinfo gpu                 # também aceita: video, vga, --gpu
+```
+
+```
+  PLACAS DE VÍDEO
+
+  GPU 1
+  Nome         AMD Radeon RX 6600
+  Marca        AMD
+  Tipo         dedicada
+  Driver       amdgpu
+  VRAM         2.0 GiB / 8.0 GiB
+  Uso          37%
+  Temperatura  62 °C
+  PCI          0000:03:00.0
+```
+
+Como a detecção funciona:
+
+- **AMD/Intel e GPUs em geral**: `/sys/class/drm/card*` (vendor, device, driver,
+  VRAM e uso); a temperatura vem do `hwmon` da placa;
+- **NVIDIA**: `nvidia-smi` (nome, VRAM, uso, temperatura e PCI), com limite de
+  1 s para nunca travar o terminal; se ele não existir, a GPU ainda aparece pelo
+  sysfs/`lspci`;
+- **nome do modelo**: `lspci`; sem ele, aparece o vendor/device PCI;
+- **tipo**: `integrada`, `dedicada` ou `virtual` (virtio, VMware, VirtualBox,
+  QEMU), inferido pelo vendor, driver e tamanho da VRAM.
+
+VRAM, uso e temperatura só aparecem quando o driver expõe o dado. GPUs
+integradas mostram `VRAM compartilhada`; sem sensor ou contador de uso, o campo
+fica `n/d`. Em `SYSINFO_PANEL_GPU=summary` cada GPU ocupa uma linha; `off`
+remove a seção. Sem nenhuma GPU detectada, o painel mostra `nenhuma GPU
+detectada` em vez de esconder a seção.
 
 ## Benchmark de velocidade
 
@@ -348,6 +459,8 @@ sysinfo
 | Comando | Efeito |
 | --- | --- |
 | `sysinfo` | painel (usado no `.bashrc`) |
+| `sysinfo cpu` | modelo, marca, núcleos/threads, frequência, iGPU e temperatura |
+| `sysinfo gpu` | GPUs, tipo, VRAM, uso, temperatura e PCI |
 | `sysinfo disks` | discos, partições, uso, I/O e temperatura |
 | `sysinfo ram [--update]` | slots, geração, frequência, fabricante e temperatura da RAM |
 | `sysinfo ports [--all] [-v]` | portas em escuta, processo/container e detalhes |
@@ -374,6 +487,8 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL=all` | `all` | composição: `all`, `compact`, `none` ou lista de tokens |
 | `SYSINFO_PANEL_HIDE=...` | — | tokens removidos da composição |
 | `SYSINFO_PANEL_COLUMNS=auto` | `auto` | `auto`, `1` ou `2` colunas |
+| `SYSINFO_PANEL_CPU=full` | `full` | `full` (modelo/iGPU), `summary` ou `off` |
+| `SYSINFO_PANEL_GPU=full` | `full` | `full` (VRAM/uso/temp), `summary` ou `off` |
 | `SYSINFO_PANEL_DISKS=full` | `full` | `full` (partições) ou `summary` |
 | `SYSINFO_PANEL_RAM=full` | `full` | `full` (slots), `summary` ou `off` |
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` (lista) ou `summary` |
@@ -384,6 +499,9 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
 | `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório do cache do bench e da RAM |
 | `SYSINFO_RAM_DMI_FILE=...` | — | dump de `dmidecode -t memory` para os detalhes de RAM |
+| `SYSINFO_CPU_HWMON_DIR=...` | `/sys/class/hwmon` | diretório dos sensores da CPU (útil em testes) |
+| `SYSINFO_CPU_THERMAL_DIR=...` | `/sys/class/thermal` | diretório das zonas térmicas (alternativa) |
+| `SYSINFO_GPU_DRM_DIR=...` | `/sys/class/drm` | diretório dos dispositivos DRM/GPU (útil em testes) |
 
 Exemplos:
 
@@ -439,6 +557,8 @@ terminal-dashboard/
 │   ├── config.sh      # variáveis, cores, caracteres, largura e painel
 │   ├── ui.sh          # formatação, barras e linhas
 │   ├── system.sh      # seção SISTEMA (uptime, bateria, temperatura, serviços)
+│   ├── cpu.sh         # modelo, núcleos/threads, frequência, iGPU e temperatura
+│   ├── gpu.sh         # GPUs, VRAM, uso, temperatura e seção do painel
 │   ├── memory.sh      # slots, tipo, frequência e temperatura da RAM
 │   ├── disks.sh       # discos, filesystems e "sysinfo disks"
 │   ├── network.sh     # interface, Wi-Fi, taxas e internet
@@ -473,6 +593,10 @@ Ferramentas opcionais (cada linha correspondente é omitida se faltar):
 | `systemctl` | `systemd` | serviços com falha (só aparece se houver) |
 | `smartctl` | `smartmontools` | saúde SMART e temperatura de HDD em `sysinfo disks` |
 | `dmidecode` | `dmidecode` | slots, geração, frequência e fabricante da RAM em `sysinfo ram` |
+| `lspci` | `pciutils` | nome/modelo das GPUs em `sysinfo gpu` |
+| `nvidia-smi` | driver NVIDIA | VRAM, uso e temperatura de GPUs NVIDIA |
 
 A temperatura da RAM depende do sensor exposto pelo hardware (`spd5118` em
-DDR5, `jc42` em DDR4); sem sensor, a linha é omitida.
+DDR5, `jc42` em DDR4); sem sensor, a linha é omitida. O mesmo vale para a CPU
+(`coretemp`, `k10temp`, `zenpower` ou `thermal_zone`) e para a GPU (`hwmon` da
+placa ou `nvidia-smi`).

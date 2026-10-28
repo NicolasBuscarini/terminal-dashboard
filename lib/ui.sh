@@ -53,6 +53,39 @@ fmt_speed() {
   fi
 }
 
+# MHz -> "1.6 GHz" ou "800 MHz" (CPU/GPU).
+fmt_freq_mhz() {
+  local mhz=$1
+  if (( mhz >= 1000 )); then
+    printf '%d.%d GHz' $(( mhz / 1000 )) $(( (mhz % 1000) / 100 ))
+  else
+    printf '%d MHz' "$mhz"
+  fi
+}
+
+# Cor por temperatura em °C (verde < 65, amarelo < 80, vermelho acima).
+temp_color() {
+  local t=$1
+  if (( t >= 80 )); then
+    printf '%s' "$C_RED"
+  elif (( t >= 65 )); then
+    printf '%s' "$C_YELLOW"
+  else
+    printf '%s' "$C_GREEN"
+  fi
+}
+
+# Trunca texto simples (sem ANSI) para no máximo "max" colunas.
+fit_text() {
+  local s=$1 max=$2
+  (( max < 1 )) && { printf ''; return 0; }
+  if (( ${#s} > max )); then
+    printf '%s%s' "${s:0:max-1}" "$ch_ellipsis"
+  else
+    printf '%s' "$s"
+  fi
+}
+
 pct() {
   local used=$1 total=$2
   if (( total <= 0 )); then

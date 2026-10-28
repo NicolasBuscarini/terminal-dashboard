@@ -5,6 +5,8 @@
 #  Projeto: ~/Code/terminal-dashboard
 #  Uso:
 #    sysinfo                  mostra o painel
+#    sysinfo cpu              modelo, núcleos/threads, iGPU e temperatura da CPU
+#    sysinfo gpu              GPUs, VRAM, uso, temperatura e tipo
 #    sysinfo disks            detalhes dos discos e partições
 #    sysinfo ram [--update]   slots, tipo, frequência e temperatura da RAM
 #    sysinfo ports [--all] [-v]  portas em escuta, processo e container
@@ -24,9 +26,11 @@
 #    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
 #
 #    SYSINFO_PANEL=all          composição: all, compact, none ou lista de
-#                               header,cpu,mem,swap,ram,disks,net,internet,ports,
-#                               bench,uptime,battery,temp,services
+#                               header,cpu,gpu,mem,swap,ram,disks,net,internet,
+#                               ports,bench,uptime,battery,temp,services
 #    SYSINFO_PANEL_HIDE=...     tokens removidos da composição
+#    SYSINFO_PANEL_CPU=full     full (modelo/iGPU), summary ou off
+#    SYSINFO_PANEL_GPU=full     full (detalhes), summary ou off
 #    SYSINFO_PANEL_DISKS=full   full (detalhes) ou summary (uma linha por disco)
 #    SYSINFO_PANEL_RAM=full     full (slots), summary ou off
 #    SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
@@ -77,6 +81,8 @@ sysinfo — resumo do sistema exibido ao abrir o terminal
 
 Uso:
   sysinfo                  mostra o painel
+  sysinfo cpu              modelo, marca, núcleos/threads, iGPU e temperatura
+  sysinfo gpu              GPUs, VRAM, uso, temperatura e tipo
   sysinfo disks            discos, partições, uso, I/O e temperatura
   sysinfo ram              slots, tipo, frequência, fabricante e temperatura da RAM
   sysinfo ram --update     relê o DMI com sudo e atualiza o cache
@@ -101,14 +107,16 @@ Variáveis de ambiente:
 
 Composição do painel:
   SYSINFO_PANEL=all          all, compact, none ou lista separada por vírgulas:
-                             header,cpu,mem,swap,ram,disks,net,internet,ports,
-                             bench,uptime,battery,temp,services
+                             header,cpu,gpu,mem,swap,ram,disks,net,internet,
+                             ports,bench,uptime,battery,temp,services
                              (aliases: memory, network/wifi, load)
   SYSINFO_PANEL_HIDE=...     remove tokens da composição
   SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
   SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
 
 Detalhes e desempenho:
+  SYSINFO_PANEL_CPU=full     full (modelo/iGPU), summary ou off
+  SYSINFO_PANEL_GPU=full     full (VRAM/uso/temp), summary ou off
   SYSINFO_PANEL_DISKS=full   full (detalhes/partições) ou summary
   SYSINFO_PANEL_RAM=full     full (lista os slots), summary (uma linha) ou off
   SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
@@ -132,6 +140,8 @@ case ${1:-} in
   -V|--version) printf 'sysinfo %s\n' "$version"; exit 0 ;;
   ports|--ports) mode=ports ;;
   disks|--disks) mode=disks ;;
+  cpu|processor|--cpu) mode=cpu ;;
+  gpu|video|vga|--gpu) mode=gpu ;;
   ram|mem|memory|--ram) mode=ram ;;
   bench|--bench) mode=bench; bench_target=${2:-$HOME} ;;
   '') ;;
@@ -159,12 +169,18 @@ fi
 . "$lib_dir/bench.sh"
 # shellcheck source=lib/memory.sh
 . "$lib_dir/memory.sh"
+# shellcheck source=lib/cpu.sh
+. "$lib_dir/cpu.sh"
+# shellcheck source=lib/gpu.sh
+. "$lib_dir/gpu.sh"
 # shellcheck source=lib/panel.sh
 . "$lib_dir/panel.sh"
 
 case $mode in
   ports) shift; show_ports "$@" ;;
   disks) show_disks ;;
+  cpu) shift; show_cpu "$@" ;;
+  gpu) shift; show_gpu "$@" ;;
   ram) shift; show_ram "$@" ;;
   bench) show_bench "$bench_target" ;;
   panel) render_panel ;;

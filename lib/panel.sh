@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # panel.sh — composição dinâmica do painel e layout responsivo.
 
-PANEL_ALL=(header cpu mem swap ram disks net internet ports bench uptime battery temp services)
+PANEL_ALL=(header cpu gpu mem swap ram disks net internet ports bench uptime battery temp services)
 declare -A PANEL_ON=()
 
 # Adiciona um token (ou preset) à composição do painel.
@@ -12,7 +12,7 @@ panel_add_token() {
       for t in "${PANEL_ALL[@]}"; do PANEL_ON[$t]=1; done
       ;;
     compact|minimal)
-      for t in header cpu mem swap ram disks net internet ports uptime battery temp; do
+      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp; do
         PANEL_ON[$t]=1
       done
       ;;
@@ -20,7 +20,7 @@ panel_add_token() {
     memory) PANEL_ON[mem]=1; PANEL_ON[ram]=1 ;;
     network|wifi) PANEL_ON[net]=1; PANEL_ON[internet]=1 ;;
     load) PANEL_ON[cpu]=1 ;;
-    header|cpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services)
+    header|cpu|gpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services)
       PANEL_ON[$tok]=1
       ;;
   esac
@@ -32,7 +32,7 @@ panel_del_token() {
   case $tok in
     all) PANEL_ON=() ;;
     compact|minimal)
-      for t in header cpu mem swap ram disks net internet ports uptime battery temp; do
+      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp; do
         unset 'PANEL_ON[$t]'
       done
       ;;
@@ -48,6 +48,8 @@ panel_config_init() {
   local tok
   for tok in ${panel_mode//,/ }; do panel_add_token "$tok"; done
   for tok in ${panel_hide//,/ }; do panel_del_token "$tok"; done
+  [[ $panel_cpu == off ]] && unset 'PANEL_ON[cpu]'
+  [[ $panel_gpu == off ]] && unset 'PANEL_ON[gpu]'
   [[ $panel_ram == off ]] && unset 'PANEL_ON[ram]'
 }
 
@@ -142,28 +144,69 @@ render_header() {
 
 # --------------------------------------------------------------- CPU/MEM/SWAP
 render_cpu_row() {
-  local dt di cpu_pct cores core_label load1 load5 load15 _
+  [[ $panel_cpu == off ]] && return 0
+  cpu_detect
+
+  local dt di cpu_pct load1 load5 load15 _
   dt=$(( cpu_t2 - cpu_t1 ))
   di=$(( cpu_i2 - cpu_i1 ))
   cpu_pct=0
   (( dt > 0 )) && cpu_pct=$(( (dt - di) * 100 / dt ))
 
-  cores=$(nproc 2>/dev/null || printf '1')
-  if (( cores == 1 )); then
-    core_label='1 núcleo'
-  else
-    core_label="$cores núcleos"
-  fi
   read -r load1 load5 load15 _ < /proc/loadavg
   local cpu_col cpu_pct_str
   cpu_col=$(level_color "$cpu_pct")
   printf -v cpu_pct_str '%3d%%' "$cpu_pct"
+
+  local cores=${CPU_CORES:-0} threads=${CPU_THREADS:-0}
+  local core_label
+  if (( cores == 1 )); then
+    core_label='1 núcleo'
+  else
+    core_label="${cores} núcleos"
+  fi
+  (( threads > cores )) && core_label+=" · ${threads} threads"
+
+  local temp_part=''
+  if [[ -n ${CPU_TEMP:-} ]]; then
+    temp_part=" · $(temp_color "$CPU_TEMP")${CPU_TEMP} °C${C_RESET}"
+  fi
+
   if (( compact )); then
     make_bar "$cpu_pct" 8
-    emit_row 'CPU' "${cpu_col}${BAR}${C_RESET}  ${cpu_col}${cpu_pct_str}${C_RESET}   ${C_DIM}carga${C_RESET} ${load1}"
+    local row="${cpu_col}${BAR}${C_RESET}  ${cpu_col}${cpu_pct_str}${C_RESET}   "
+    if (( cols >= 55 )); then
+      if (( threads > cores )); then
+        row+="${C_DIM}${cores}C/${threads}T${C_RESET} · "
+      else
+        row+="${C_DIM}${cores}C${C_RESET} · "
+      fi
+    fi
+    if [[ -n ${CPU_TEMP:-} ]] && (( cols >= 46 )); then
+      row+="$(temp_color "$CPU_TEMP")${CPU_TEMP} °C${C_RESET} · "
+    fi
+    row+="${C_DIM}carga${C_RESET} ${load1}"
+    emit_row 'CPU' "$row"
   else
     make_bar "$cpu_pct"
-    emit_row 'CPU' "${cpu_col}${BAR}${C_RESET}  ${cpu_col}${cpu_pct_str}${C_RESET}   ${C_DIM}${core_label}${C_RESET} ${dot} ${C_DIM}carga${C_RESET} ${load1} ${load5} ${load15}"
+    emit_row 'CPU' "${cpu_col}${BAR}${C_RESET}  ${cpu_col}${cpu_pct_str}${C_RESET}   ${C_DIM}${core_label}${C_RESET}${temp_part}"
+  fi
+
+  if [[ $panel_cpu == full ]] && (( ! compact )) && (( cols >= 70 )); then
+    local detail=${CPU_MODEL_SHORT:-${CPU_MODEL:-CPU}}
+    local igpu=${CPU_IGPU:-}
+    case ${CPU_BRAND:-} in
+      Intel) igpu=${igpu#Intel } ;;
+      AMD) igpu=${igpu#AMD } ;;
+    esac
+    if [[ -n $igpu ]]; then
+      detail+=" · iGPU $igpu"
+    else
+      detail+=' · sem iGPU'
+    fi
+    (( cols >= 78 )) && detail+=" · carga ${load1} ${load5} ${load15}"
+    detail=$(fit_text "$detail" "$(( cols - 11 ))")
+    [[ -n $detail ]] && emit_row '' "$detail"
   fi
 }
 
@@ -404,12 +447,14 @@ render_panel() {
     left=$(render_block render_processing_section "$w")
     right=$(render_block render_system_section "$w")
     print_columns "$left" "$right" "$w"
+    render_gpu_section
     render_storage_section
     render_network_section
     render_ports_section
     render_bench_section
   else
     render_processing_section
+    render_gpu_section
     render_storage_section
     render_network_section
     render_ports_section
@@ -418,7 +463,7 @@ render_panel() {
   fi
 
   if (( panel_hint )) && (( ${#PANEL_ON[@]} > 0 )); then
-    local hint='sysinfo disks · ram · ports · bench · --help'
+    local hint='sysinfo cpu · gpu · ram · disks · ports · bench · --help'
     (( cols < 60 )) && hint='sysinfo --help'
     printf '\n  %s%s%s\n' "$C_DIM" "$hint" "$C_RESET"
   fi
