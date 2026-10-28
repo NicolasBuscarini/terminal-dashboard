@@ -34,6 +34,10 @@ cache.
   MEM      ███████▏░░░░░░   51%   3.7 GiB / 7.1 GiB
   SWAP     ░░░░░░░░░░░░░░    0%   332.0 KiB / 3.9 GiB
 
+  ▌ PROCESSOS ──────────────────────────────────────────────────────────────────
+  CPU      ptyxis 38.7% · bash 36.1% · opencode 25.8%
+  MEM      firefox 499.1 MiB · Isolated Web Co 472.6 MiB · opencode 383.4 MiB
+
   ▌ MEMÓRIA RAM ────────────────────────────────────────────────────────────────
   RAM      DDR4 · 2400 MT/s · 2/2 slots · 8.0 GiB · 46 °C
            ChannelA-DIMM0  SODIMM  4.0 GiB  Samsung  DDR4-2400
@@ -118,6 +122,7 @@ tokens disponíveis:
 | `mem` | uso da memória RAM (linha do PROCESSAMENTO) |
 | `swap` | swap |
 | `ram` | seção MEMÓRIA RAM: slots, geração DDR, frequência, fabricante e temperatura |
+| `procs` | seção PROCESSOS: maiores consumos de CPU e memória |
 | `disks` | discos e partições (detalhado por padrão) |
 | `net` | interface ativa, Wi-Fi/ethernet e taxas |
 | `internet` | IP local e teste de conectividade |
@@ -130,9 +135,10 @@ tokens disponíveis:
 | `session` | desktop, tipo de sessão (Wayland/X11) e terminal |
 | `commands` | lista de comandos do `sysinfo` no rodapé |
 
-Presets prontos: `all`, `compact` (sem bench e serviços, mas com CPU, GPU,
-sessão e comandos), `minimal` (alias) e `none` (painel vazio). Também há
-aliases: `memory` = `mem`, `network`/`wifi` = `net,internet`, `load` = `cpu`.
+Presets prontos: `all`, `compact` (sem bench, serviços e processos, mas com
+CPU, GPU, sessão e comandos), `minimal` (alias) e `none` (painel vazio). Também
+há aliases: `memory` = `mem`, `network`/`wifi` = `net,internet`, `load` = `cpu`,
+`processes`/`top` = `procs`.
 
 ```bash
 # só o essencial, em uma linha por seção
@@ -387,6 +393,44 @@ estreitos, uma linha por comando. `SYSINFO_PANEL_COMMANDS=compact` mostra só os
 nomes e `off` esconde a lista (o antigo `SYSINFO_PANEL_HINT=0` continua
 funcionando).
 
+## Processos
+
+A seção **PROCESSOS** mostra os maiores consumos de CPU e de memória (RSS) no
+momento, usando a mesma janela de amostragem do painel. Não precisa de root:
+os dados vêm de `/proc/<pid>/stat` (ticks de CPU, threads, estado, RSS e nome).
+
+```bash
+sysinfo procs              # 10 processos com mais CPU
+sysinfo procs --mem        # ordena por memória residente
+sysinfo procs -n 20        # quantidade de linhas
+sysinfo procs -d 1         # janela de amostragem de 1 s
+```
+
+```
+  PROCESSOS · MAIS CPU
+  307 processos · amostra de 0.5 s
+
+  PID         CPU%     MEM%        RSS  EST  PROCESSO
+  5260       36.0%     1.9%  140.6 MiB   17  R ptyxis
+  5399       24.0%     5.2%  384.0 MiB   22  S opencode
+  3931       15.0%     3.4%  249.3 MiB   28  S gnome-shell
+  249         3.0%     0.0%        0 B    1  I kworker/0:3-i915-unordered
+  269138      3.0%     0.0%    5.9 MiB    1  S bash
+
+  EST: R executando · S dormindo · D I/O · I ocioso · Z zumbi · T parado
+```
+
+A porcentagem de CPU é **relativa a um núcleo**, como no `top`: um processo
+usando várias threads pode passar de 100%. `MEM%` é o RSS em relação à memória
+total. `EST` é o estado do processo (`R` executando, `S` dormindo, `D` esperando
+I/O, `Z` zumbi, `T` parado). Em terminais estreitos, a tabela omite RSS, threads
+e estado; o nome do processo é truncado para caber.
+
+No painel, a seção mostra os 3 maiores por CPU e por memória (4 em terminais
+com 100 colunas ou mais, 1 com `SYSINFO_PANEL_PROCS=summary`). Para esconder:
+`SYSINFO_PANEL_PROCS=off` ou `SYSINFO_PANEL_HIDE=procs`. O comando é controlado
+por `SYSINFO_PROCS_TOP` (quantidade) e `SYSINFO_PROCS_DELAY` (janela).
+
 ## Benchmarks
 
 O `sysinfo bench` tem quatro testes. Cada um grava um cache próprio em
@@ -556,6 +600,7 @@ sysinfo
 | `sysinfo gpu` | GPUs, tipo, VRAM, uso, temperatura e PCI |
 | `sysinfo disks` | discos, partições, uso, I/O e temperatura |
 | `sysinfo ram [--update]` | slots, geração, frequência, fabricante e temperatura da RAM |
+| `sysinfo procs [--top N] [--delay S] [--mem]` | processos com mais CPU ou memória (RSS) |
 | `sysinfo ports [--all] [-v]` | portas em escuta, processo/container e detalhes |
 | `sysinfo bench [tipo] [dir]` | benchmark: `seq` (padrão), `4k`, `mem`, `cpu` ou `all` |
 | `sysinfo --help` / `--version` | ajuda / versão |
@@ -568,7 +613,7 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | Variável | Padrão | Efeito |
 | --- | --- | --- |
 | `SYSINFO_DISABLE=1` | — | não mostra o painel |
-| `SYSINFO_DELAY=0.25` | `0.25` | segundos de amostragem de CPU/rede/disco |
+| `SYSINFO_DELAY=0.25` | `0.25` | segundos de amostragem de CPU/rede/disco/processos |
 | `SYSINFO_BAR_WIDTH=14` | `14` | largura das barras de CPU/MEM/SWAP (6 a 40) |
 | `SYSINFO_NO_COLOR=1` | — | sem cores (`NO_COLOR` também funciona) |
 | `SYSINFO_NET_CHECK=0` | `1` | desativa o teste de internet |
@@ -588,6 +633,9 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL_GPU=full` | `full` | `full` (VRAM/uso/temp), `summary` ou `off` |
 | `SYSINFO_PANEL_DISKS=full` | `full` | `full` (partições) ou `summary` |
 | `SYSINFO_PANEL_RAM=full` | `full` | `full` (slots), `summary` ou `off` |
+| `SYSINFO_PANEL_PROCS=full` | `full` | `full` (3 processos), `summary` (1) ou `off` |
+| `SYSINFO_PROCS_TOP=10` | `10` | quantidade padrão de processos em `sysinfo procs` |
+| `SYSINFO_PROCS_DELAY=0.5` | `0.5` | janela de amostragem de `sysinfo procs`, em s |
 | `SYSINFO_PANEL_PORTS=table` | `table` | `table` (lista) ou `summary` |
 | `SYSINFO_PANEL_PORTS_MAX=0` | `0` | máximo de portas listadas (`0` = todas) |
 | `SYSINFO_PANEL_BENCH=auto` | `auto` | `auto`, `live`, `cache` ou `off` |
@@ -660,6 +708,7 @@ terminal-dashboard/
 │   ├── cpu.sh         # modelo, núcleos/threads, frequência, iGPU e temperatura
 │   ├── gpu.sh         # GPUs, VRAM, uso, temperatura e seção do painel
 │   ├── memory.sh      # slots, tipo, frequência e temperatura da RAM
+│   ├── procs.sh       # processos por CPU/memória, comando e seção do painel
 │   ├── disks.sh       # discos, filesystems e "sysinfo disks"
 │   ├── network.sh     # interface, Wi-Fi, taxas e internet
 │   ├── ports.sh       # portas, processos, containers e TIPO

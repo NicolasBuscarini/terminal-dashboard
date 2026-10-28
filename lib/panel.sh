@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # panel.sh — composição dinâmica do painel e layout responsivo.
 
-PANEL_ALL=(header cpu gpu mem swap ram disks net internet ports bench uptime battery temp services session commands)
+PANEL_ALL=(header cpu gpu mem swap ram procs disks net internet ports bench uptime battery temp services session commands)
 declare -A PANEL_ON=()
 
 # Adiciona um token (ou preset) à composição do painel.
@@ -20,6 +20,7 @@ panel_add_token() {
     memory) PANEL_ON[mem]=1; PANEL_ON[ram]=1 ;;
     network|wifi) PANEL_ON[net]=1; PANEL_ON[internet]=1 ;;
     load) PANEL_ON[cpu]=1 ;;
+    procs|processes|top) PANEL_ON[procs]=1 ;;
     header|cpu|gpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services|session|commands)
       PANEL_ON[$tok]=1
       ;;
@@ -39,6 +40,7 @@ panel_del_token() {
     memory) unset 'PANEL_ON[mem]'; unset 'PANEL_ON[ram]' ;;
     network|wifi) unset 'PANEL_ON[net]'; unset 'PANEL_ON[internet]' ;;
     load) unset 'PANEL_ON[cpu]' ;;
+    procs|processes|top) unset 'PANEL_ON[procs]' ;;
     *) unset "PANEL_ON[$tok]" ;;
   esac
 }
@@ -51,6 +53,7 @@ panel_config_init() {
   [[ $panel_cpu == off ]] && unset 'PANEL_ON[cpu]'
   [[ $panel_gpu == off ]] && unset 'PANEL_ON[gpu]'
   [[ $panel_ram == off ]] && unset 'PANEL_ON[ram]'
+  [[ $panel_procs == off ]] && unset 'PANEL_ON[procs]'
 }
 
 panel_on() { [[ -n ${PANEL_ON[$1]:-} ]]; }
@@ -206,8 +209,8 @@ render_cpu_row() {
     else
       detail+=' · sem iGPU'
     fi
-    (( cols >= 96 )) && [[ -n ${CPU_GOVERNOR:-} ]] && detail+=" · $CPU_GOVERNOR"
     (( cols >= 78 )) && detail+=" · carga ${load1} ${load5} ${load15}"
+    (( cols >= 100 )) && [[ -n ${CPU_GOVERNOR:-} ]] && detail+=" · $CPU_GOVERNOR"
     detail=$(fit_text "$detail" "$(( cols - 11 ))")
     [[ -n $detail ]] && emit_row '' "$detail"
   fi
@@ -427,6 +430,7 @@ render_bench_section() {
 # documentação. Em terminais largos, usa duas colunas.
 COMMANDS_LIST=(
   'sysinfo|painel completo'
+  'sysinfo procs|top CPU e memória'
   'sysinfo cpu|CPU e temperatura'
   'sysinfo gpu|GPU, VRAM e uso'
   'sysinfo ram|slots e --update'
@@ -464,9 +468,10 @@ render_commands_section() {
 
   if (( cols >= 80 )); then
     local w=$(( (cols - 6) / 2 ))
+    local half=$(( (${#COMMANDS_LIST[@]} + 1) / 2 ))
     local left right
-    left=$(render_command_block "$w" "${COMMANDS_LIST[@]:0:4}")
-    right=$(render_command_block "$w" "${COMMANDS_LIST[@]:4:4}")
+    left=$(render_command_block "$w" "${COMMANDS_LIST[@]:0:half}")
+    right=$(render_command_block "$w" "${COMMANDS_LIST[@]:half}")
     print_columns "$left" "$right" "$w"
   else
     render_command_block "$cols" "${COMMANDS_LIST[@]}"
@@ -479,7 +484,7 @@ render_panel() {
 
   # Só espera a janela de amostragem se alguma linha precisar de taxas.
   local sample=0
-  panel_any cpu net disks && sample=1
+  panel_any cpu net disks procs && sample=1
 
   # Teste de internet em paralelo com a janela de amostragem.
   probe_pid=''
@@ -499,7 +504,9 @@ render_panel() {
     read -r net_rx1 net_tx1 <<< "$(net_snapshot)"
     while read -r n r w; do io_r1[$n]=$r; io_w1[$n]=$w; done < <(disk_io_snapshot)
 
+    panel_on procs && procs_sample_begin
     sleep "$delay"
+    panel_on procs && procs_sample_end
 
     read -r cpu_t2 cpu_i2 <<< "$(cpu_snapshot)"
     read -r net_rx2 net_tx2 <<< "$(net_snapshot)"
@@ -555,6 +562,7 @@ render_panel() {
     left=$(render_block render_processing_section "$w")
     right=$(render_block render_system_section "$w")
     print_columns "$left" "$right" "$w"
+    render_procs_section
     render_ram_section
     render_gpu_section
     render_storage_section
@@ -563,6 +571,7 @@ render_panel() {
     render_bench_section
   else
     render_processing_section
+    render_procs_section
     render_ram_section
     render_gpu_section
     render_storage_section

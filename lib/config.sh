@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.7.0
+version=2.8.0
 probe_file=''
 bench_file=''
 
@@ -49,11 +49,22 @@ disks_delay=${SYSINFO_DISKS_DELAY:-0.3}
 [[ $disks_delay =~ ^[0-9]+([.,][0-9]+)?$ ]] || disks_delay=0.3
 disks_delay=${disks_delay/,/.}
 
+# Processos: quantidade padrão do comando e janela de amostragem dele.
+procs_top=${SYSINFO_PROCS_TOP:-10}
+[[ $procs_top =~ ^[0-9]+$ ]] || procs_top=10
+(( procs_top < 1 )) && procs_top=1
+(( procs_top > 200 )) && procs_top=200
+
+procs_delay=${SYSINFO_PROCS_DELAY:-0.5}
+[[ $procs_delay =~ ^[0-9]+([.,][0-9]+)?$ ]] || procs_delay=0.5
+procs_delay=${procs_delay/,/.}
+
 docker_check=${SYSINFO_DOCKER_CHECK:-1}
 
 # ------------------------------------------------------------- painel/composição
-# all | compact | lista de: header cpu mem swap disks net internet ports bench
-#                        uptime battery temp services
+# all | compact | lista de: header cpu gpu mem swap ram procs disks net
+#                        internet ports bench uptime battery temp services
+#                        session commands
 panel_mode=${SYSINFO_PANEL:-all}
 panel_hide=${SYSINFO_PANEL_HIDE:-}
 
@@ -91,6 +102,13 @@ panel_ram=${SYSINFO_PANEL_RAM:-full}
 case $panel_ram in
   full|summary|off) ;;
   *) panel_ram=full ;;
+esac
+
+# Seção PROCESSOS: full (3 processos, 4 em terminais largos), summary (1) ou off.
+panel_procs=${SYSINFO_PANEL_PROCS:-full}
+case $panel_procs in
+  full|summary|off) ;;
+  *) panel_procs=full ;;
 esac
 
 panel_columns=${SYSINFO_PANEL_COLUMNS:-auto}

@@ -9,13 +9,14 @@
 #    sysinfo gpu              GPUs, VRAM, uso, temperatura e tipo
 #    sysinfo disks            detalhes dos discos e partições
 #    sysinfo ram [--update]   slots, tipo, frequência e temperatura da RAM
+#    sysinfo procs [--top N] [--delay S]  processos que mais usam CPU/memória
 #    sysinfo ports [--all] [-v]  portas em escuta, processo e container
 #    sysinfo bench [dir]      benchmark de escrita/leitura sequencial
 #    sysinfo --help           mostra a ajuda
 #
 #  Configuração (variáveis de ambiente):
 #    SYSINFO_DISABLE=1          desativa o painel
-#    SYSINFO_DELAY=0.25         janela de amostragem de CPU/rede/disco (s)
+#    SYSINFO_DELAY=0.25         amostragem de CPU/rede/disco/processos (s)
 #    SYSINFO_BAR_WIDTH=14       largura das barras de CPU/MEM/SWAP (6 a 40)
 #    SYSINFO_NO_COLOR=1         desativa cores (NO_COLOR também funciona)
 #    SYSINFO_NET_CHECK=0        não testa conectividade com a internet
@@ -29,14 +30,17 @@
 #    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
 #
 #    SYSINFO_PANEL=all          composição: all, compact, none ou lista de
-#                               header,cpu,gpu,mem,swap,ram,disks,net,internet,
-#                               ports,bench,uptime,battery,temp,services,
-#                               session,commands
+#                               header,cpu,gpu,mem,swap,ram,procs,disks,net,
+#                               internet,ports,bench,uptime,battery,temp,
+#                               services,session,commands
 #    SYSINFO_PANEL_HIDE=...     tokens removidos da composição
 #    SYSINFO_PANEL_CPU=full     full (modelo/iGPU), summary ou off
 #    SYSINFO_PANEL_GPU=full     full (detalhes), summary ou off
 #    SYSINFO_PANEL_DISKS=full   full (detalhes) ou summary (uma linha por disco)
 #    SYSINFO_PANEL_RAM=full     full (slots), summary ou off
+#    SYSINFO_PANEL_PROCS=full   full (3 processos), summary (1) ou off
+#    SYSINFO_PROCS_TOP=10       quantidade padrão em "sysinfo procs"
+#    SYSINFO_PROCS_DELAY=0.5    janela de amostragem de "sysinfo procs" (s)
 #    SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
 #    SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
 #    SYSINFO_PANEL_BENCH=auto   auto (cache expirado), live, cache ou off
@@ -91,6 +95,9 @@ Uso:
   sysinfo disks            discos, partições, uso, I/O e temperatura
   sysinfo ram              slots, tipo, frequência, fabricante e temperatura da RAM
   sysinfo ram --update     relê o DMI com sudo e atualiza o cache
+  sysinfo procs            processos que mais consomem CPU (top)
+  sysinfo procs --mem      processos que mais consomem memória (RSS)
+  sysinfo procs -n 20 -d 1 quantidade e janela de amostragem
   sysinfo ports            lista as portas TCP em escuta e o processo/docker
   sysinfo ports --all      lista TCP + UDP
   sysinfo ports -v         mostra diretório e linha de comando do processo
@@ -100,7 +107,7 @@ Uso:
 
 Variáveis de ambiente:
   SYSINFO_DISABLE=1          desativa o painel
-  SYSINFO_DELAY=0.25         janela de amostragem de CPU/rede/disco, em s
+  SYSINFO_DELAY=0.25         amostragem de CPU/rede/disco/processos, em s
   SYSINFO_BAR_WIDTH=14       largura das barras de CPU/MEM/SWAP (6 a 40)
   SYSINFO_NO_COLOR=1         desativa as cores (NO_COLOR também funciona)
   SYSINFO_NET_CHECK=0        não testa conectividade com a internet
@@ -115,10 +122,11 @@ Variáveis de ambiente:
 
 Composição do painel:
   SYSINFO_PANEL=all          all, compact, none ou lista separada por vírgulas:
-                             header,cpu,gpu,mem,swap,ram,disks,net,internet,
-                             ports,bench,uptime,battery,temp,services,
-                             session,commands
-                             (aliases: memory, network/wifi, load)
+                             header,cpu,gpu,mem,swap,ram,procs,disks,net,
+                             internet,ports,bench,uptime,battery,temp,
+                             services,session,commands
+                             (aliases: memory, network/wifi, load,
+                             procs/processes/top)
   SYSINFO_PANEL_HIDE=...     remove tokens da composição
   SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
   SYSINFO_PANEL_COMMANDS=full  full (com descrições), compact (só nomes) ou off
@@ -129,6 +137,9 @@ Detalhes e desempenho:
   SYSINFO_PANEL_GPU=full     full (VRAM/uso/temp), summary ou off
   SYSINFO_PANEL_DISKS=full   full (detalhes/partições) ou summary
   SYSINFO_PANEL_RAM=full     full (lista os slots), summary (uma linha) ou off
+  SYSINFO_PANEL_PROCS=full   full (3 processos), summary (1) ou off
+  SYSINFO_PROCS_TOP=10       quantidade padrão de processos em "sysinfo procs"
+  SYSINFO_PROCS_DELAY=0.5    janela de amostragem de "sysinfo procs", em s
   SYSINFO_PANEL_PORTS=table  table (lista) ou summary (linha-resumo)
   SYSINFO_PANEL_PORTS_MAX=0  máximo de portas listadas (0 = todas)
   SYSINFO_PANEL_BENCH=auto   auto (refaz se o cache expirou), live, cache, off
@@ -154,6 +165,7 @@ case ${1:-} in
   cpu|processor|--cpu) mode=cpu ;;
   gpu|video|vga|--gpu) mode=gpu ;;
   ram|mem|memory|--ram) mode=ram ;;
+  procs|processes|top|--procs) mode=procs ;;
   bench|--bench) mode=bench ;;
   '') ;;
   *) printf 'sysinfo: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
@@ -184,6 +196,8 @@ fi
 . "$lib_dir/cpu.sh"
 # shellcheck source=lib/gpu.sh
 . "$lib_dir/gpu.sh"
+# shellcheck source=lib/procs.sh
+. "$lib_dir/procs.sh"
 # shellcheck source=lib/panel.sh
 . "$lib_dir/panel.sh"
 
@@ -193,6 +207,7 @@ case $mode in
   cpu) shift; show_cpu "$@" ;;
   gpu) shift; show_gpu "$@" ;;
   ram) shift; show_ram "$@" ;;
+  procs) shift; show_procs "$@" ;;
   bench) shift; show_bench "$@" ;;
   panel) render_panel ;;
 esac
