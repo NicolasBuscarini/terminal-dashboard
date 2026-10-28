@@ -31,9 +31,9 @@ count_procs() {
 }
 
 # ------------------------------------------------------------------- sistema
-# Seção SISTEMA: uptime, processos, usuários, bateria, temperatura e falhas.
+# Seção SISTEMA: uptime, processos, usuários, sessão, bateria, temperatura e falhas.
 render_system_section() {
-  panel_any uptime battery temp services || return 0
+  panel_any uptime battery temp services session || return 0
 
   # Monta o conteúdo primeiro para não imprimir uma seção vazia quando o
   # hardware/ferramenta não existe (ex.: só "battery" num desktop).
@@ -72,9 +72,40 @@ render_system_section() {
     fi
   fi
 
+  if panel_on session; then
+    sess_desktop=${XDG_CURRENT_DESKTOP:-${XDG_SESSION_DESKTOP:-${DESKTOP_SESSION:-}}}
+    sess_desktop=${sess_desktop##*:}
+    case ${sess_desktop,,} in
+      gnome) sess_desktop='GNOME' ;;
+      kde|plasma) sess_desktop='KDE' ;;
+      xfce) sess_desktop='XFCE' ;;
+      mate) sess_desktop='MATE' ;;
+      cinnamon) sess_desktop='Cinnamon' ;;
+      sway) sess_desktop='Sway' ;;
+      ubuntu) sess_desktop='Ubuntu' ;;
+    esac
+    sess_type=${XDG_SESSION_TYPE:-}
+    case $sess_type in
+      wayland) sess_type='Wayland' ;;
+      x11) sess_type='X11' ;;
+      tty) sess_type='TTY' ;;
+    esac
+    sess_term=${TERM_PROGRAM:-${TERM:-}}
+    sess_line=''
+    [[ -n $sess_desktop ]] && sess_line=$sess_desktop
+    [[ -n $sess_type ]] && sess_line+="${sess_line:+ $dot }$sess_type"
+    if (( ! compact )) && [[ -n $sess_term ]]; then
+      sess_line+="${sess_line:+ $dot }$sess_term"
+    fi
+    if [[ -n $sess_line ]]; then
+      sess_line=$(fit_text "$sess_line" "$(( cols - 11 ))")
+      emit_row 'SESSÃO' "$sess_line"
+    fi
+  fi
+
   if panel_on battery; then
     bat_path=''
-    for bat in /sys/class/power_supply/BAT*; do
+    for bat in "${battery_dir:-/sys/class/power_supply}"/BAT*; do
       if [[ -r $bat/capacity ]]; then
         bat_path=$bat
         break
@@ -97,7 +128,79 @@ render_system_section() {
       else
         bat_col=$C_GREEN
       fi
-      emit_row 'BATERIA' "${bat_col}${bat_cap}%${C_RESET} ${dot} ${C_DIM}${bat_status_pt}${C_RESET}"
+
+      # Saúde: capacidade cheia atual em relação à de projeto.
+      bat_health=''
+      bat_full=0 bat_design=0
+      if [[ -r $bat_path/charge_full && -r $bat_path/charge_full_design ]]; then
+        bat_full=$(<"$bat_path/charge_full")
+        bat_design=$(<"$bat_path/charge_full_design")
+      elif [[ -r $bat_path/energy_full && -r $bat_path/energy_full_design ]]; then
+        bat_full=$(<"$bat_path/energy_full")
+        bat_design=$(<"$bat_path/energy_full_design")
+      fi
+      if [[ $bat_full =~ ^[0-9]+$ && $bat_design =~ ^[0-9]+$ ]] && (( bat_design > 0 && bat_full > 0 )); then
+        bat_health=$(( bat_full * 100 / bat_design ))
+        (( bat_health > 100 )) && bat_health=100
+      fi
+
+      # Tempo restante (descarga) ou até a carga completa, quando o driver
+      # expõe potência/corrente.
+      bat_minutes=''
+      if [[ $bat_status == Discharging || $bat_status == Charging ]]; then
+        bat_now=0 bat_power=0 bat_limit=0
+        if [[ -r $bat_path/energy_now && -r $bat_path/power_now ]]; then
+          bat_now=$(<"$bat_path/energy_now")
+          bat_power=$(<"$bat_path/power_now")
+          [[ -r $bat_path/energy_full ]] && bat_limit=$(<"$bat_path/energy_full")
+        elif [[ -r $bat_path/charge_now && -r $bat_path/current_now ]]; then
+          bat_now=$(<"$bat_path/charge_now")
+          bat_power=$(<"$bat_path/current_now")
+          [[ -r $bat_path/charge_full ]] && bat_limit=$(<"$bat_path/charge_full")
+        fi
+        [[ $bat_power =~ ^-?[0-9]+$ ]] || bat_power=0
+        (( bat_power < 0 )) && bat_power=$(( -bat_power ))
+        if [[ $bat_now =~ ^[0-9]+$ ]] && (( bat_power > 0 && bat_now > 0 )); then
+          if [[ $bat_status == Charging && $bat_limit =~ ^[0-9]+$ ]] && (( bat_limit > bat_now )); then
+            bat_minutes=$(( (bat_limit - bat_now) * 60 / bat_power ))
+          elif [[ $bat_status == Discharging ]]; then
+            bat_minutes=$(( bat_now * 60 / bat_power ))
+          fi
+        fi
+      fi
+
+      bat_time=''
+      if [[ $bat_minutes =~ ^[0-9]+$ ]] && (( bat_minutes > 0 )); then
+        if (( bat_minutes >= 60 )); then
+          bat_time="~$(( bat_minutes / 60 ))h $(( bat_minutes % 60 ))m"
+        else
+          bat_time="~${bat_minutes}m"
+        fi
+        if [[ $bat_status == Charging ]]; then
+          bat_time+=' para cheia'
+        else
+          bat_time+=' restantes'
+        fi
+      fi
+
+      bat_extra=''
+      [[ -n $bat_time ]] && bat_extra+=" ${dot} ${C_DIM}${bat_time}${C_RESET}"
+      if [[ -n $bat_health ]] && (( ! compact )); then
+        if (( bat_health >= 80 )); then
+          bat_health_col=$C_GREEN
+        elif (( bat_health >= 60 )); then
+          bat_health_col=$C_YELLOW
+        else
+          bat_health_col=$C_RED
+        fi
+        bat_extra+=" ${dot} ${C_DIM}saúde ${bat_health_col}${bat_health}%${C_RESET}"
+      fi
+
+      if (( compact )); then
+        emit_row 'BATERIA' "${bat_col}${bat_cap}%${C_RESET} ${dot} ${C_DIM}${bat_status_pt}${C_RESET}"
+      else
+        emit_row 'BATERIA' "${bat_col}${bat_cap}%${C_RESET} ${dot} ${C_DIM}${bat_status_pt}${C_RESET}${bat_extra}"
+      fi
     fi
   fi
 

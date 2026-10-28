@@ -2,7 +2,7 @@
 # config.sh — versão, variáveis de ambiente, cores, caracteres e largura.
 # Sourced por bin/sysinfo; não execute diretamente.
 
-version=2.6.0
+version=2.7.0
 probe_file=''
 bench_file=''
 
@@ -99,8 +99,16 @@ case $panel_columns in
   *) panel_columns=auto ;;
 esac
 
-panel_hint=${SYSINFO_PANEL_HINT:-1}
-[[ $panel_hint == 0 ]] || panel_hint=1
+# Lista de comandos no rodapé do painel: full (com descrições), compact (só os
+# nomes) ou off. SYSINFO_PANEL_HINT=0 continua escondendo a lista.
+panel_commands=${SYSINFO_PANEL_COMMANDS:-full}
+case $panel_commands in
+  full|compact|off) ;;
+  *) panel_commands=full ;;
+esac
+if [[ ${SYSINFO_PANEL_HINT:-1} == 0 && -z ${SYSINFO_PANEL_COMMANDS:-} ]]; then
+  panel_commands=off
+fi
 
 panel_ports_max=${SYSINFO_PANEL_PORTS_MAX:-0}
 [[ $panel_ports_max =~ ^[0-9]+$ ]] || panel_ports_max=0
@@ -128,10 +136,11 @@ memory_cache_file=$memory_cache_dir/dmidecode-memory
 memory_hwmon_dir=${SYSINFO_RAM_HWMON_DIR:-/sys/class/hwmon}
 memory_edac_dir=${SYSINFO_RAM_EDAC_DIR:-/sys/devices/system/edac/mc}
 
-# Sensores do processador e dispositivos de vídeo (sysfs).
+# Sensores do processador, dispositivos de vídeo e bateria (sysfs).
 cpu_hwmon_dir=${SYSINFO_CPU_HWMON_DIR:-/sys/class/hwmon}
 cpu_thermal_dir=${SYSINFO_CPU_THERMAL_DIR:-/sys/class/thermal}
 gpu_drm_dir=${SYSINFO_GPU_DRM_DIR:-/sys/class/drm}
+battery_dir=${SYSINFO_BATTERY_DIR:-/sys/class/power_supply}
 
 # --------------------------------------------------------------------- cores
 C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN='' C_ACCENT=''

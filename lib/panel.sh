@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # panel.sh — composição dinâmica do painel e layout responsivo.
 
-PANEL_ALL=(header cpu gpu mem swap ram disks net internet ports bench uptime battery temp services)
+PANEL_ALL=(header cpu gpu mem swap ram disks net internet ports bench uptime battery temp services session commands)
 declare -A PANEL_ON=()
 
 # Adiciona um token (ou preset) à composição do painel.
@@ -12,7 +12,7 @@ panel_add_token() {
       for t in "${PANEL_ALL[@]}"; do PANEL_ON[$t]=1; done
       ;;
     compact|minimal)
-      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp; do
+      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp session commands; do
         PANEL_ON[$t]=1
       done
       ;;
@@ -20,7 +20,7 @@ panel_add_token() {
     memory) PANEL_ON[mem]=1; PANEL_ON[ram]=1 ;;
     network|wifi) PANEL_ON[net]=1; PANEL_ON[internet]=1 ;;
     load) PANEL_ON[cpu]=1 ;;
-    header|cpu|gpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services)
+    header|cpu|gpu|mem|swap|ram|disks|net|internet|ports|bench|uptime|battery|temp|services|session|commands)
       PANEL_ON[$tok]=1
       ;;
   esac
@@ -32,7 +32,7 @@ panel_del_token() {
   case $tok in
     all) PANEL_ON=() ;;
     compact|minimal)
-      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp; do
+      for t in header cpu gpu mem swap ram disks net internet ports uptime battery temp session commands; do
         unset 'PANEL_ON[$t]'
       done
       ;;
@@ -199,11 +199,14 @@ render_cpu_row() {
       Intel) igpu=${igpu#Intel } ;;
       AMD) igpu=${igpu#AMD } ;;
     esac
+    # Frequência atual e governador só entram quando há espaço na linha.
+    (( cols >= 90 && ${CPU_FREQ_CUR:-0} > 0 )) && detail+=" · $(fmt_freq_mhz "$CPU_FREQ_CUR")"
     if [[ -n $igpu ]]; then
       detail+=" · iGPU $igpu"
     else
       detail+=' · sem iGPU'
     fi
+    (( cols >= 96 )) && [[ -n ${CPU_GOVERNOR:-} ]] && detail+=" · $CPU_GOVERNOR"
     (( cols >= 78 )) && detail+=" · carga ${load1} ${load5} ${load15}"
     detail=$(fit_text "$detail" "$(( cols - 11 ))")
     [[ -n $detail ]] && emit_row '' "$detail"
@@ -211,11 +214,12 @@ render_cpu_row() {
 }
 
 render_mem_row() {
-  local mem_total=0 mem_avail=0 swap_total=0 swap_free=0 key val _
+  local mem_total=0 mem_avail=0 mem_cache=0 swap_total=0 swap_free=0 key val _
   while read -r key val _; do
     case $key in
       MemTotal:) mem_total=$val ;;
       MemAvailable:) mem_avail=$val ;;
+      Cached:) mem_cache=$val ;;
       SwapTotal:) swap_total=$val ;;
       SwapFree:) swap_free=$val ;;
     esac
@@ -232,7 +236,10 @@ render_mem_row() {
     emit_row 'MEM' "${mem_col}${BAR}${C_RESET}  ${mem_col}${mem_pct_str}${C_RESET}   $(fmt_pair "$mem_used" "$mem_total")"
   else
     make_bar "$mem_pct"
-    emit_row 'MEM' "${mem_col}${BAR}${C_RESET}  ${mem_col}${mem_pct_str}${C_RESET}   $(fmt_bytes "$mem_used") / $(fmt_bytes "$mem_total")"
+    local detail
+    detail="$(fmt_bytes "$mem_used") / $(fmt_bytes "$mem_total")"
+    (( cols >= 90 && mem_cache > 0 )) && detail+="  ${C_DIM}cache $(fmt_bytes $(( mem_cache * 1024 )))${C_RESET}"
+    emit_row 'MEM' "${mem_col}${BAR}${C_RESET}  ${mem_col}${mem_pct_str}${C_RESET}   ${detail}"
   fi
 }
 
@@ -415,6 +422,57 @@ render_bench_section() {
   render_bench_extra_rows
 }
 
+# ---------------------------------------------------------------- comandos
+# Lista de comandos no rodapé para não precisar decorar a CLI nem abrir a
+# documentação. Em terminais largos, usa duas colunas.
+COMMANDS_LIST=(
+  'sysinfo|painel completo'
+  'sysinfo cpu|CPU e temperatura'
+  'sysinfo gpu|GPU, VRAM e uso'
+  'sysinfo ram|slots e --update'
+  'sysinfo disks|discos e partições'
+  'sysinfo ports|portas (--all, -v)'
+  'sysinfo bench|4k, mem, cpu e all'
+  'sysinfo --help|ajuda e variáveis'
+)
+
+render_command_block() {
+  local width=$1
+  shift
+  local entry cmd desc label maxw
+  for entry in "$@"; do
+    cmd=${entry%%|*}
+    desc=${entry#*|}
+    if [[ $panel_commands == compact ]]; then
+      printf '  %s%s%s\n' "$C_ACCENT" "$cmd" "$C_RESET"
+    else
+      printf -v label '%-14s' "$cmd"
+      maxw=$(( width - 18 ))
+      (( maxw < 1 )) && maxw=1
+      desc=$(fit_text "$desc" "$maxw")
+      printf '  %s%s%s  %s%s%s\n' \
+        "$C_ACCENT" "$label" "$C_RESET" "$C_DIM" "$desc" "$C_RESET"
+    fi
+  done
+}
+
+render_commands_section() {
+  panel_on commands || return 0
+  [[ $panel_commands == off ]] && return 0
+
+  section 'COMANDOS'
+
+  if (( cols >= 80 )); then
+    local w=$(( (cols - 6) / 2 ))
+    local left right
+    left=$(render_command_block "$w" "${COMMANDS_LIST[@]:0:4}")
+    right=$(render_command_block "$w" "${COMMANDS_LIST[@]:4:4}")
+    print_columns "$left" "$right" "$w"
+  else
+    render_command_block "$cols" "${COMMANDS_LIST[@]}"
+  fi
+}
+
 # ===================================================================== painel
 render_panel() {
   panel_config_init
@@ -514,10 +572,6 @@ render_panel() {
     render_system_section
   fi
 
-  if (( panel_hint )) && (( ${#PANEL_ON[@]} > 0 )); then
-    local hint='sysinfo cpu · gpu · ram · disks · ports · bench · --help'
-    (( cols < 60 )) && hint='sysinfo --help'
-    printf '\n  %s%s%s\n' "$C_DIM" "$hint" "$C_RESET"
-  fi
+  render_commands_section
   printf '\n'
 }

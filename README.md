@@ -83,10 +83,15 @@ cache.
 
   ▌ SISTEMA ────────────────────────────────────────────────────────────────────
   UPTIME   no ar há 1h 3m · 309 processos · 1 usuário
-  BATERIA  100% · cheia
+  SESSÃO   GNOME · Wayland · xterm-256color
+  BATERIA  100% · cheia · saúde 96%
   TEMP     60 °C
 
-  sysinfo cpu · gpu · ram · disks · ports · bench · --help
+  ▌ COMANDOS ───────────────────────────────────────────────────────────────────
+  sysinfo         painel completo        sysinfo disks   discos e partições
+  sysinfo cpu     CPU e temperatura      sysinfo ports   portas (--all, -v)
+  sysinfo gpu     GPU, VRAM e uso        sysinfo bench   4k, mem, cpu e all
+  sysinfo ram     slots e --update       sysinfo --help  ajuda e variáveis
 ```
 
 As barras ficam verdes até 60%, amarelas até 85% e vermelhas acima disso. As
@@ -119,13 +124,15 @@ tokens disponíveis:
 | `ports` | portas em escuta (tabela por padrão) |
 | `bench` | benchmarks em cache (sequencial, 4K, memória e CPU) |
 | `uptime` | tempo no ar, processos e usuários |
-| `battery` | bateria (se houver) |
+| `battery` | bateria, saúde e tempo restante (se houver) |
 | `temp` | temperatura (se disponível) |
 | `services` | serviços systemd com falha (só aparece se houver) |
+| `session` | desktop, tipo de sessão (Wayland/X11) e terminal |
+| `commands` | lista de comandos do `sysinfo` no rodapé |
 
-Presets prontos: `all`, `compact` (sem bench e serviços, mas com CPU e GPU),
-`minimal` (alias) e `none` (painel vazio). Também há aliases: `memory` = `mem`, `network`/`wifi` =
-`net,internet`, `load` = `cpu`.
+Presets prontos: `all`, `compact` (sem bench e serviços, mas com CPU, GPU,
+sessão e comandos), `minimal` (alias) e `none` (painel vazio). Também há
+aliases: `memory` = `mem`, `network`/`wifi` = `net,internet`, `load` = `cpu`.
 
 ```bash
 # só o essencial, em uma linha por seção
@@ -160,7 +167,8 @@ export SYSINFO_PANEL=compact
 | `SYSINFO_PANEL_BENCH_EXTRA=auto` | `auto` | `auto` mostra 4K/RAM/CPU com cache válido; `cache` mostra cache vencido; `off` esconde |
 | `SYSINFO_BENCH_PANEL_SIZE=32` | `32` | tamanho do bench rápido do painel, em MiB |
 | `SYSINFO_BENCH_TTL_DAYS=7` | `7` | validade do cache do bench, em dias |
-| `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
+| `SYSINFO_PANEL_COMMANDS=full` | `full` | `full` (com descrições), `compact` (só nomes) ou `off` |
+| `SYSINFO_PANEL_HINT=0` | `1` | alias antigo: `0` esconde a lista de comandos |
 
 O painel nunca espera um benchmark lento ao abrir o terminal: ele usa os caches
 em `${XDG_CACHE_HOME:-$HOME/.cache}/sysinfo` (`bench`, `bench-4k`, `bench-mem`,
@@ -359,6 +367,25 @@ integradas mostram `VRAM compartilhada`; sem sensor ou contador de uso, o campo
 fica `n/d`. Em `SYSINFO_PANEL_GPU=summary` cada GPU ocupa uma linha; `off`
 remove a seção. Sem nenhuma GPU detectada, o painel mostra `nenhuma GPU
 detectada` em vez de esconder a seção.
+
+## Sistema, sessão e comandos
+
+A seção **SISTEMA** reúne uptime/processos, sessão gráfica, bateria,
+temperatura e serviços com falha:
+
+- **SESSÃO**: desktop (`XDG_CURRENT_DESKTOP`), tipo (`Wayland`/`X11`) e
+  terminal (`TERM_PROGRAM`/`TERM`); em terminais estreitos o terminal é omitido.
+- **BATERIA**: carga e estado; quando o driver informa capacidade de projeto,
+  mostra a **saúde** (capacidade cheia atual ÷ de projeto); quando informa
+  potência/corrente, mostra o tempo restante ou até a carga completa.
+- **TEMP**: maior temperatura entre as zonas térmicas.
+- **SERVIÇOS**: unidades systemd com falha (até três nomes).
+
+A seção **COMANDOS** no rodapé lista os comandos mais usados com uma descrição
+curta. Em terminais com 80 colunas ou mais ela usa duas colunas; em terminais
+estreitos, uma linha por comando. `SYSINFO_PANEL_COMMANDS=compact` mostra só os
+nomes e `off` esconde a lista (o antigo `SYSINFO_PANEL_HINT=0` continua
+funcionando).
 
 ## Benchmarks
 
@@ -567,12 +594,14 @@ Tudo por variáveis de ambiente. Para tornar uma opção permanente, coloque o
 | `SYSINFO_PANEL_BENCH_EXTRA=auto` | `auto` | `auto` (cache válido), `cache` (cache vencido) ou `off` |
 | `SYSINFO_BENCH_PANEL_SIZE=32` | `32` | tamanho do bench rápido do painel, em MiB |
 | `SYSINFO_BENCH_TTL_DAYS=7` | `7` | validade do cache do bench, em dias |
-| `SYSINFO_PANEL_HINT=0` | `1` | esconde o rodapé de dicas |
+| `SYSINFO_PANEL_COMMANDS=full` | `full` | `full` (com descrições), `compact` (só nomes) ou `off` |
+| `SYSINFO_PANEL_HINT=0` | `1` | alias antigo: `0` esconde a lista de comandos |
 | `SYSINFO_CACHE_DIR=...` | `~/.cache/sysinfo` | diretório dos caches dos benchmarks e da RAM |
 | `SYSINFO_RAM_DMI_FILE=...` | — | dump de `dmidecode -t memory` para os detalhes de RAM |
 | `SYSINFO_CPU_HWMON_DIR=...` | `/sys/class/hwmon` | diretório dos sensores da CPU (útil em testes) |
 | `SYSINFO_CPU_THERMAL_DIR=...` | `/sys/class/thermal` | diretório das zonas térmicas (alternativa) |
 | `SYSINFO_GPU_DRM_DIR=...` | `/sys/class/drm` | diretório dos dispositivos DRM/GPU (útil em testes) |
+| `SYSINFO_BATTERY_DIR=...` | `/sys/class/power_supply` | diretório das baterias (útil em testes) |
 
 Exemplos:
 
@@ -627,7 +656,7 @@ terminal-dashboard/
 ├── lib/
 │   ├── config.sh      # variáveis, cores, caracteres, largura e painel
 │   ├── ui.sh          # formatação, barras e linhas
-│   ├── system.sh      # seção SISTEMA (uptime, bateria, temperatura, serviços)
+│   ├── system.sh      # seção SISTEMA (uptime, sessão, bateria, temperatura)
 │   ├── cpu.sh         # modelo, núcleos/threads, frequência, iGPU e temperatura
 │   ├── gpu.sh         # GPUs, VRAM, uso, temperatura e seção do painel
 │   ├── memory.sh      # slots, tipo, frequência e temperatura da RAM

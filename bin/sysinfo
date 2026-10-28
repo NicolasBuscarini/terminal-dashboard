@@ -21,13 +21,17 @@
 #    SYSINFO_NET_CHECK=0        não testa conectividade com a internet
 #    SYSINFO_NET_TIMEOUT=0.5    tempo máximo do teste de internet (s)
 #    SYSINFO_PING_HOST=1.1.1.1  host usado no teste de internet
-#    SYSINFO_BENCH_SIZE=256     tamanho do benchmark do CLI, em MiB
+#    SYSINFO_BENCH_SIZE=256     tamanho do benchmark sequencial, em MiB
+#    SYSINFO_BENCH_4K_SIZE=16   tamanho do benchmark de 4 KiB, em MiB
+#    SYSINFO_BENCH_MEM_SIZE=64  tamanho do benchmark de memória, em MiB
+#    SYSINFO_BENCH_CPU_SIZE=64  MiB por thread no benchmark de CPU
 #    SYSINFO_DISKS_DELAY=0.3    janela de amostragem de I/O em "sysinfo disks"
 #    SYSINFO_DOCKER_CHECK=0     não consulta o Docker ao listar portas
 #
 #    SYSINFO_PANEL=all          composição: all, compact, none ou lista de
 #                               header,cpu,gpu,mem,swap,ram,disks,net,internet,
-#                               ports,bench,uptime,battery,temp,services
+#                               ports,bench,uptime,battery,temp,services,
+#                               session,commands
 #    SYSINFO_PANEL_HIDE=...     tokens removidos da composição
 #    SYSINFO_PANEL_CPU=full     full (modelo/iGPU), summary ou off
 #    SYSINFO_PANEL_GPU=full     full (detalhes), summary ou off
@@ -39,7 +43,8 @@
 #    SYSINFO_BENCH_PANEL_SIZE=32  tamanho do bench rápido do painel, em MiB
 #    SYSINFO_BENCH_TTL_DAYS=7   validade do cache do bench, em dias
 #    SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
-#    SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
+#    SYSINFO_PANEL_COMMANDS=full  full, compact ou off (lista de comandos)
+#    SYSINFO_PANEL_HINT=0       esconde a lista de comandos (equivalente a off)
 #    SYSINFO_CACHE_DIR=...      diretório do cache (padrão XDG_CACHE_HOME/sysinfo)
 #    SYSINFO_RAM_DMI_FILE=...   usa um dump de "dmidecode -t memory" em vez do cache
 #
@@ -111,11 +116,13 @@ Variáveis de ambiente:
 Composição do painel:
   SYSINFO_PANEL=all          all, compact, none ou lista separada por vírgulas:
                              header,cpu,gpu,mem,swap,ram,disks,net,internet,
-                             ports,bench,uptime,battery,temp,services
+                             ports,bench,uptime,battery,temp,services,
+                             session,commands
                              (aliases: memory, network/wifi, load)
   SYSINFO_PANEL_HIDE=...     remove tokens da composição
   SYSINFO_PANEL_COLUMNS=auto auto, 1 ou 2 (duas colunas em terminais largos)
-  SYSINFO_PANEL_HINT=0       esconde o rodapé de dicas
+  SYSINFO_PANEL_COMMANDS=full  full (com descrições), compact (só nomes) ou off
+  SYSINFO_PANEL_HINT=0       esconde a lista de comandos (alias de off)
 
 Detalhes e desempenho:
   SYSINFO_PANEL_CPU=full     full (modelo/iGPU), summary ou off
